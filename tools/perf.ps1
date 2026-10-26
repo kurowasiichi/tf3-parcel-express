@@ -1,5 +1,6 @@
 # Sums up the "[parcel_delivery] perf" lines of the game log (written by the game script every 60 s of game time), to
-# compare the optimizations.
+# compare the optimizations. The update runs in several Lua states (the simulation threads of the game), each writes its
+# own lines: they are added up over the real time the lines cover (the time stamps of the log).
 #   (no parameter): the summary of the current log
 #   -Save <name>:   also stores it as perf\<name>.csv (e.g. -Save 0-baseline)
 #   -Compare:       the stored summaries side by side
@@ -38,35 +39,53 @@ if (-not $Log) {
 $lines = Select-String -Path $Log -Pattern "\[parcel_delivery\] perf " -Encoding UTF8 | ForEach-Object { $_.Line }
 if (-not $lines) { throw "no perf lines in $Log" }
 
-# per metric: the values of all lines
-$values = [ordered]@{}
-function Add-Value([string]$metric, [double]$value) {
-    if (-not $values.Contains($metric)) { $values[$metric] = New-Object System.Collections.Generic.List[double] }
-    $values[$metric].Add($value)
-}
+$first = $null; $last = $null
+$updates = 0; $totalMs = 0.0; $longest = 0.0
+$parts = [ordered]@{}   # part -> runs, total ms, longest ms
+$counts = [ordered]@{}  # name -> values
 foreach ($line in $lines) {
+    if ($line -match "^\[(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)Z") {
+        $time = [datetime]::ParseExact($Matches[1], "yyyy-MM-dd HH:mm:ss", $null)
+        if ($null -eq $first -or $time -lt $first) { $first = $time }
+        if ($null -eq $last -or $time -gt $last) { $last = $time }
+    }
     $text = $line.Substring($line.IndexOf("perf "))
-    if ($text -match "real=([\d.]+)s") { Add-Value "real s" $Matches[1] }
-    if ($text -match "frames=(\d+)") { Add-Value "frames" $Matches[1] }
-    if ($text -match "total=([\d.]+)ms") { Add-Value "total ms" $Matches[1] }
-    if ($text -match "share=([\d.]+)%") { Add-Value "share %" $Matches[1] }
+    if ($text -match "total=([\d.]+)ms") { $totalMs += [double]$Matches[1] }
     foreach ($m in [regex]::Matches($text, "(\w+)=(\d+)x/([\d.]+)ms/([\d.]+)ms")) {
         $part = $m.Groups[1].Value
-        Add-Value "$part runs" $m.Groups[2].Value
-        Add-Value "$part avg ms" $m.Groups[3].Value
-        Add-Value "$part max ms" $m.Groups[4].Value
+        $runs = [double]$m.Groups[2].Value
+        if (-not $parts.Contains($part)) { $parts[$part] = @(0.0, 0.0, 0.0) }
+        $parts[$part][0] += $runs
+        $parts[$part][1] += $runs * [double]$m.Groups[3].Value
+        $parts[$part][2] = [math]::Max($parts[$part][2], [double]$m.Groups[4].Value)
     }
-    $counts = $text.Substring($text.LastIndexOf("|") + 1)
-    foreach ($m in [regex]::Matches($counts, "(\w+)=(\d+)")) { Add-Value "count $($m.Groups[1].Value)" $m.Groups[2].Value }
+    $tail = $text.Substring($text.LastIndexOf("|") + 1)
+    foreach ($m in [regex]::Matches($tail, "(\w+)=(\d+)")) {
+        $name = $m.Groups[1].Value
+        if (-not $counts.Contains($name)) { $counts[$name] = New-Object System.Collections.Generic.List[double] }
+        $counts[$name].Add([double]$m.Groups[2].Value)
+    }
 }
+# the lines are written at the end of their period: the first one covers about a minute before its time stamp
+$realS = [math]::Max(1, ($last - $first).TotalSeconds + 60)
+$minutes = $realS / 60
 
-# the average of every metric over the lines, the largest for the longest times
-$rows = foreach ($metric in $values.Keys) {
-    $list = $values[$metric]
-    $value = if ($metric -like "* max ms") { ($list | Measure-Object -Maximum).Maximum } else { ($list | Measure-Object -Average).Average }
-    [pscustomobject]@{ Metric = $metric; Value = [math]::Round($value, 3) }
+$rows = New-Object System.Collections.Generic.List[object]
+function Add-Row([string]$metric, [double]$value) { $rows.Add([pscustomobject]@{ Metric = $metric; Value = [math]::Round($value, 3) }) }
+Add-Row "real minutes" $minutes
+Add-Row "perf lines" $lines.Count
+Add-Row "script ms per real s" ($totalMs / $realS)
+Add-Row "script share %" ($totalMs / ($realS * 1000) * 100)
+foreach ($part in $parts.Keys) {
+    $p = $parts[$part]
+    Add-Row "$part runs per min" ($p[0] / $minutes)
+    Add-Row "$part avg ms" ($p[1] / [math]::Max(1, $p[0]))
+    Add-Row "$part max ms" $p[2]
+    Add-Row "$part ms per min" ($p[1] / $minutes)
 }
-Write-Output ("{0} perf lines from {1}" -f $lines.Count, $Log)
+foreach ($name in $counts.Keys) { Add-Row "count $name" (($counts[$name] | Measure-Object -Maximum).Maximum) }
+
+Write-Output ("{0} perf lines, {1:N1} real minutes ({2} - {3} UTC), {4}" -f $lines.Count, $minutes, $first, $last, $Log)
 $rows | Format-Table -AutoSize
 
 if ($Save) {

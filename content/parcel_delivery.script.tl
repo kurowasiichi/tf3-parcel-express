@@ -79,7 +79,7 @@ local FallbackMillisPerDay <const> = 2000
 -- it. The time is that of os.clock (on Windows the elapsed time); without it only the counts are logged.
 local clock : function() : number = os ~= nil and os.clock or nil
 local PerfLogMs <const> = 60000
-local perfLuaState = string.match(tostring({}), "0x%x+") or "?"
+local perfLuaState = string.match(tostring({}), "(%x+)$") or "?"
 
 local record Perf
 	--- game time (ms) and os.clock at the start of the period, -1 before the first update
