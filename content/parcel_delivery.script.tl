@@ -47,8 +47,20 @@ local DropBoxInset <const> = 1.0
 local MinDropBoxOffset <const> = 3.0
 --- game time (ms) between two passes
 local PassIntervalMs <const> = 2000
---- the town needs, the mailboxes, the sources and the residents are looked up every n-th pass
+--- The town needs, the mailboxes, the delivery points and the boost of the sorting centers are looked up every n-th
+--- pass, each on a pass of its own (ScanTurns), so they do not all fall on the same pass. The town buildings are looked
+--- at town by town, every town once in TownScanPasses passes (30 s of game time), a part of them on every pass.
 local ScanEveryPasses <const> = 5
+local TownScanPasses <const> = 15
+--- the pass (remainder of the pass count by ScanEveryPasses) of each of the tasks looked up every ScanEveryPasses passes
+local record ScanTurns
+	townNeeds : integer
+	mailboxes : integer
+	deliveryPoints : integer
+	sortingBoost : integer
+	reachable : integer
+end
+local ScanTurn <const> : ScanTurns = { townNeeds = 0, mailboxes = 1, deliveryPoints = 2, sortingBoost = 3, reachable = 4 }
 --- a summary is logged every n-th pass
 local LogEveryPasses <const> = 30
 --- town buildings within this distance (m) of a parcel post count for it: the options of the mod parameter (mod.json),
@@ -564,57 +576,118 @@ local function pairDeliveryPoints(s : PdState)
 	end
 end
 
---- the town buildings within the service range of the mailboxes: the residents of the residential ones and the stock
---- lists of the commercial and industrial ones. A building in the range of several mailboxes counts for the one built
---- first: a mailbox placed where the others already collect gets only the buildings no other one covers.
---- Returns the residents of every residential building by its stock list (all of the map, for the reachable residents).
-local function scanBuildings(s : PdState) : {Engine.Entity : integer}
-	local homes : {Engine.Entity : integer} = {}
+--- The mailbox a town building at p counts for: of the mailboxes whose range covers it, the one built first (a mailbox
+--- placed where the others already collect gets only the buildings no other one covers); -1 if none covers it.
+local function mailboxFor(s : PdState, p : Vec3f, radius2 : number) : Engine.Entity
+	local first : PdBox = nil
+	local firstKey : Engine.Entity = -1
+	for key, box in pairs(s.boxes) do
+		if box.position ~= nil then
+			local dx, dy = p.x - box.position[1], p.y - box.position[2]
+			if dx * dx + dy * dy <= radius2 then
+				local built, firstBuilt = box.builtAt or 0, first ~= nil and (first.builtAt or 0) or 0
+				if first == nil or built < firstBuilt or (built == firstBuilt and key < firstKey) then
+					first, firstKey = box, key
+				end
+			end
+		end
+	end
+	return firstKey
+end
+
+--- the share of every mailbox in the buildings of one town: the residents of the residential buildings and the stock
+--- lists of the commercial and industrial ones in its range; and the entities of the town without a town building
+--- component (for the perf line: all of them would mean the map holds other entities)
+local function scanTown(s : PdState, buildings : {Engine.Entity}, radius2 : number) : {Engine.Entity : PdTownShare}, integer
+	local shares : {Engine.Entity : PdTownShare} = {}
+	local residential = api.type["enum"].LandUseType.RESIDENTIAL
+	local missing = 0
+	for _, entity in ipairs(buildings) do
+		local building = api.engine.getComponent(entity, api.type.ComponentType.TOWN_BUILDING) as Engine.Component.TownBuilding
+		if building == nil then
+			missing = missing + 1
+		end
+		local pc = personCapacityOf(building and building.personCapacity)
+		local p = pc ~= nil and positionOf(building.construction) or nil
+		local key = p ~= nil and mailboxFor(s, p, radius2) or -1
+		if key >= 0 then
+			local share = shares[key]
+			if share == nil then
+				share = { residents = 0, suppliers = {} }
+				shares[key] = share
+			end
+			if pc.type == residential then
+				share.residents = share.residents + (pc.capacity or 0)
+			elseif building.stockList ~= nil and building.stockList >= 0 then
+				table.insert(share.suppliers, building.stockList)
+			end
+		end
+	end
+	return shares, missing
+end
+
+--- The town buildings within the service range of the mailboxes, spread over the passes: every pass looks at the towns
+--- of its turn, each town once in TownScanPasses passes, and keeps their shares in the state; the residents and
+--- suppliers of every mailbox are the sum of the shares of all towns. The shares of a mailbox built or removed since
+--- count from the next look at the towns around it (a removed one is left out of the sum at once).
+local function scanTowns(s : PdState) : boolean
+	local radius = collectionRadius()
+	local radius2 = radius * radius
+	local townMap = api.engine.system.townBuildingSystem.getTown2BuildingMap() or {}
+	local towns : {Engine.Entity} = {}
+	for town in pairs(townMap) do
+		towns[#towns + 1] = town
+	end
+	table.sort(towns)
+	s.townShares = s.townShares or {}
+	local turn = s.passes % TownScanPasses
+	local buildingCount, missingCount = 0, 0
+	for i, town in ipairs(towns) do
+		if (i - 1) % TownScanPasses == turn or s.townShares[town] == nil then
+			local shares, missing = scanTown(s, townMap[town], radius2)
+			s.townShares[town] = shares
+			buildingCount = buildingCount + #townMap[town]
+			missingCount = missingCount + missing
+		end
+	end
+	-- towns that no longer exist
+	for town in pairs(s.townShares) do
+		if townMap[town] == nil then
+			s.townShares[town] = nil
+		end
+	end
 	for _, box in pairs(s.boxes) do
 		box.residents = 0
 		box.suppliers = {}
 	end
-	local radius = collectionRadius()
-	local radius2 = radius * radius
-	local residential = api.type["enum"].LandUseType.RESIDENTIAL
-	local buildingCount = 0
-	api.engine.forEachEntityWithComponent(function(entity : Engine.Entity)
-		buildingCount = buildingCount + 1
-		local building = api.engine.getComponent(entity, api.type.ComponentType.TOWN_BUILDING) as Engine.Component.TownBuilding
-		local pc = personCapacityOf(building and building.personCapacity)
-		if pc == nil then
-			return
-		end
-		if pc.type == residential and building.stockList ~= nil and building.stockList >= 0 then
-			homes[building.stockList] = pc.capacity or 0
-		end
-		local p = positionOf(building.construction)
-		if p == nil then
-			return
-		end
-		local first : PdBox = nil
-		local firstKey : Engine.Entity = -1
-		for key, box in pairs(s.boxes) do
-			if box.position ~= nil then
-				local dx, dy = p.x - box.position[1], p.y - box.position[2]
-				if dx * dx + dy * dy <= radius2 then
-					local built, firstBuilt = box.builtAt or 0, first ~= nil and (first.builtAt or 0) or 0
-					if first == nil or built < firstBuilt or (built == firstBuilt and key < firstKey) then
-						first, firstKey = box, key
-					end
+	for _, shares in pairs(s.townShares) do
+		for key, share in pairs(shares) do
+			local box = s.boxes[key]
+			if box ~= nil then
+				box.residents = box.residents + share.residents
+				for _, stockList in ipairs(share.suppliers) do
+					table.insert(box.suppliers, stockList)
 				end
 			end
 		end
-		if first == nil then
-			return
-		end
-		if pc.type == residential then
-			first.residents = first.residents + (pc.capacity or 0)
-		elseif building.stockList ~= nil and building.stockList >= 0 then
-			table.insert(first.suppliers, building.stockList)
+	end
+	perfCount("towns", #towns)
+	perfCount("townBuildingsScanned", buildingCount)
+	perfCount("townBuildingsMissing", missingCount)
+	return true
+end
+
+--- debug: the residents of every residential building of the map by its stock list (for the reachable residents)
+local function collectHomes() : {Engine.Entity : integer}
+	local homes : {Engine.Entity : integer} = {}
+	local residential = api.type["enum"].LandUseType.RESIDENTIAL
+	api.engine.forEachEntityWithComponent(function(entity : Engine.Entity)
+		local building = api.engine.getComponent(entity, api.type.ComponentType.TOWN_BUILDING) as Engine.Component.TownBuilding
+		local pc = personCapacityOf(building and building.personCapacity)
+		if pc ~= nil and pc.type == residential and building.stockList ~= nil and building.stockList >= 0 then
+			homes[building.stockList] = pc.capacity or 0
 		end
 	end, api.type.ComponentType.TOWN_BUILDING)
-	perfCount("townBuildings", buildingCount)
 	return homes
 end
 
@@ -1173,10 +1246,14 @@ local function runUpdate(state : GameScriptState<PdState>) : integer
 		return now
 	end
 	local how : string = nil
-	if s.passes % ScanEveryPasses == 1 then
+	-- every task looked up every ScanEveryPasses passes on a pass of its own (ScanTurn)
+	local turn = s.passes % ScanEveryPasses
+	if turn == ScanTurn.townNeeds then
 		timed("townNeeds", function()
 			ensureResidentialNeeds(parcel)
 		end)
+	end
+	if turn == ScanTurn.mailboxes then
 		local ok, result : boolean, any
 		timed("mailboxes", function()
 			ok, result = pcall(updatePosts, s, parcel)
@@ -1198,6 +1275,8 @@ local function runUpdate(state : GameScriptState<PdState>) : integer
 				end
 			end
 		end
+	end
+	if turn == ScanTurn.deliveryPoints then
 		local okPair, errPair : boolean, any
 		timed("deliveryPoints", function()
 			okPair, errPair = pcall(function() : boolean
@@ -1208,15 +1287,21 @@ local function runUpdate(state : GameScriptState<PdState>) : integer
 		if not okPair then
 			log.message("[parcel_delivery] drop boxes of the delivery points failed: " .. tostring(errPair))
 		end
-		local homes : {Engine.Entity : integer}
-		timed("townBuildings", function()
-			homes = scanBuildings(s)
-		end)
+	end
+	-- the towns of this pass (every pass)
+	local okTowns, errTowns : boolean, any
+	timed("townBuildings", function()
+		okTowns, errTowns = pcall(scanTowns, s)
+	end)
+	if not okTowns then
+		log.message("[parcel_delivery] town buildings failed: " .. tostring(errTowns))
+	end
+	if turn == ScanTurn.reachable then
 		if pd_debug.Enabled then
 			local okReach, errReach : boolean, any
 			timed("reachable", function()
 				okReach, errReach = pcall(function() : boolean
-					updateReachable(s, homes)
+					updateReachable(s, collectHomes())
 					return true
 				end)
 			end)
@@ -1231,6 +1316,8 @@ local function runUpdate(state : GameScriptState<PdState>) : integer
 				box.reachableHomes = nil
 			end
 		end
+	end
+	if turn == ScanTurn.sortingBoost then
 		local okBoost, errBoost : boolean, any
 		timed("sortingBoost", function()
 			okBoost, errBoost = pcall(fixSortingBoost)

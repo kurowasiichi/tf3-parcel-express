@@ -48,6 +48,14 @@ global record PdBox
 	requested : integer
 end
 
+--- The share of a mailbox in the buildings of one town (parcel_delivery.script.tl, scanTowns).
+global record PdTownShare
+	--- residents of the residential buildings in its range
+	residents : integer
+	--- stock list entities of the commercial and industrial buildings in its range
+	suppliers : {Engine.Entity}
+end
+
 --- Game script state (parcel_delivery.script.tl).
 global record PdState
 	version : integer
@@ -65,6 +73,8 @@ global record PdState
 	pointBoxes : {Engine.Entity : Engine.Entity}
 	pointAttempts : {Engine.Entity : integer}
 	pointAttemptsVersion : integer
+	--- the share of every mailbox in the buildings of every town, by town and mailbox (scanTowns)
+	townShares : {Engine.Entity : {Engine.Entity : PdTownShare}}
 	--- diagnostics: parcels that left a stock, by what became of them
 	leftDestroyedNoTarget : integer
 	leftDestroyedWithTarget : integer
