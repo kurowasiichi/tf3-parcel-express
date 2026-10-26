@@ -21,7 +21,16 @@ if ($Compare) {
     if (-not $files) { throw "no stored summaries in $perfDir" }
     $table = [ordered]@{}
     foreach ($file in $files) {
-        foreach ($row in Import-Csv $file.FullName) {
+        $rows = Import-Csv $file.FullName
+        # the longest update left out (computed for summaries stored before it was a row): a load of the savegame is
+        # counted as one update of many seconds
+        $byName = @{}
+        foreach ($row in $rows) { $byName[$row.Metric] = [double]$row.Value }
+        if (-not $byName.ContainsKey("update ms per min w/o longest") -and $byName.ContainsKey("update max ms")) {
+            $rows = @([pscustomobject]@{ Metric = "update ms per min w/o longest"
+                Value = [math]::Round($byName["update ms per min"] - $byName["update max ms"] / $byName["real minutes"], 3) }) + $rows
+        }
+        foreach ($row in $rows) {
             if (-not $table.Contains($row.Metric)) { $table[$row.Metric] = [ordered]@{ Metric = $row.Metric } }
             $table[$row.Metric][$file.BaseName] = $row.Value
         }
@@ -76,6 +85,10 @@ Add-Row "real minutes" $minutes
 Add-Row "perf lines" $lines.Count
 Add-Row "script ms per real s" ($totalMs / $realS)
 Add-Row "script share %" ($totalMs / ($realS * 1000) * 100)
+if ($parts.Contains("update")) {
+    # a load of the savegame is counted as one update of many seconds: left out here
+    Add-Row "update ms per min w/o longest" (($parts["update"][1] - $parts["update"][2]) / $minutes)
+}
 foreach ($part in $parts.Keys) {
     $p = $parts[$part]
     Add-Row "$part runs per min" ($p[0] / $minutes)
@@ -91,5 +104,7 @@ $rows | Format-Table -AutoSize
 if ($Save) {
     New-Item -ItemType Directory -Force $perfDir | Out-Null
     $rows | Export-Csv (Join-Path $perfDir "$Save.csv") -NoTypeInformation -Encoding UTF8
-    Write-Output "Saved perf\$Save.csv"
+    # the lines themselves, to sum them up again later (the game overwrites its log on every start)
+    $lines | Out-File (Join-Path $perfDir "$Save.log") -Encoding utf8
+    Write-Output "Saved perf\$Save.csv and perf\$Save.log"
 }
