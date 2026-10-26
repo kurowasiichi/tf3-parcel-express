@@ -17,17 +17,19 @@ local StateVersion <const> = 2
 local ParcelCargo <const> = production.ParcelCargo
 --- the rate of the business parcels is averaged over this many days (for the log)
 local BusinessAverageDays <const> = 30
---- The productivity of a stock list is only set again when it changes by more than this fraction, and it is never less
---- than that of MinParcelsPerYear (a drop box without residents and businesses). The rule takes year / capacity /
---- productivity for a parcel, and the game fixes this time when the parcel before is made: a parcel made at a very low
---- productivity puts the next one far ahead, whatever the productivity is set to afterwards (the former minimum of
---- 0.001 put it 10 years ahead and the drop box stopped). At the minimum the next parcel is at most a month ahead. At 0
---- the rule would produce as fast as it can.
+--- The productivity of a stock list is only set again when it changes by more than this fraction. A mailbox without
+--- parcels (no residents and businesses counted, e.g. before its towns are scanned) keeps productivity 1, the 100 parcels
+--- per year a stock starts with; with parcels it gets their productivity. The rule takes year / capacity / productivity
+--- for a parcel, and the game fixes this time when the parcel before is made: a parcel made at a very low productivity
+--- puts the next one far ahead, whatever the productivity is set to afterwards (the former minimum of 0.001 put it 10
+--- years ahead and the drop box stopped). At 0 the rule would produce as fast as it can.
 local ProductivityTolerance <const> = 0.05
-local MinParcelsPerYear <const> = 12
---- a rule whose next parcel is further ahead than this many times the longest time of the minimum is stuck (a parcel
---- made at the former minimum): its drop box is built again (the rule starts anew)
+local DefaultProductivity <const> = 1
+--- A rule is stuck when its next parcel is further ahead than this many times the time of a parcel at the productivity
+--- of now, and more than StuckMinYearShare of a year ahead (a parcel made at a far lower productivity): its drop box is
+--- built again (the rule starts anew).
 local StuckFactor <const> = 3
+local StuckMinYearShare <const> = 1 / 12
 --- parts of the resource names of the parcel posts and of the hidden sources of the previous prototype
 local PostFile <const> = "parcel_post.con"
 local OldSourceFile <const> = "parcel_source.con"
@@ -945,9 +947,10 @@ local function businessParcels() : boolean
 	return (param(BusinessParam) or 2) == 2
 end
 
---- whether the rule of a stock list waits for a parcel further ahead than the minimum allows (see StuckFactor)
-local function isStuck(stockList : Engine.Component.StockList, now : integer) : boolean
-	local maxInterval = api.util.getDefaultYearDuration() / MinParcelsPerYear * StuckFactor
+--- whether the rule of a stock list waits for a parcel far longer than the productivity of now takes (see StuckFactor)
+local function isStuck(stockList : Engine.Component.StockList, productivity : number, now : integer) : boolean
+	local year = api.util.getDefaultYearDuration()
+	local maxWait = math.max(StuckFactor * year / production.RuleCapacity / productivity, StuckMinYearShare * year)
 	for _, ruleData in ipairs(stockList.ruleDatas or {}) do
 		local last : Engine.Component.StockList.RuleData.ApplyInfo = nil
 		for _, apply in ipairs(ruleData.applyHistory or {}) do
@@ -955,7 +958,7 @@ local function isStuck(stockList : Engine.Component.StockList, now : integer) : 
 				last = apply
 			end
 		end
-		if last ~= nil and last.interval > maxInterval and now < last.time + last.interval then
+		if last ~= nil and last.time + last.interval - now > maxWait then
 			return true
 		end
 	end
@@ -992,15 +995,15 @@ local function produce(s : PdState, days : number, now : integer, parcel : Cargo
 			box.room = reachableRoom(s, box, parcel)
 		end
 		-- The rule of the stock produces like an industry, production.RuleCapacity parcels per year at productivity 1, so
-		-- the productivity is the share of that (at least that of MinParcelsPerYear).
+		-- the productivity is the share of that (DefaultProductivity without parcels).
 		-- the stock list of a box removed since the last scan no longer exists (getComponent throws then)
 		local stockList = box.stockList >= 0 and api.engine.entityExists(box.stockList)
 			and api.engine.getComponent(box.stockList, api.type.ComponentType.STOCK_LIST) as Engine.Component.StockList or nil
-		if stockList ~= nil and box.drop and isStuck(stockList, now) then
+		local productivity = box.perYear > 0 and box.perYear / production.RuleCapacity or DefaultProductivity
+		if stockList ~= nil and box.drop and isStuck(stockList, productivity, now) then
 			stuck[#stuck + 1] = box.source
 		end
 		if stockList ~= nil then
-			local productivity = math.max(MinParcelsPerYear, box.perYear) / production.RuleCapacity
 			-- compared with the productivity the stock list has: a rebuilt stock starts again at 1
 			local last = stockList.modifiers ~= nil and stockList.modifiers.productivity or -1
 			if last <= 0 or math.abs(productivity - last) > ProductivityTolerance * math.max(last, productivity) then
