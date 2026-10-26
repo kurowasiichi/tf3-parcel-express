@@ -856,6 +856,10 @@ end
 --- free room (parcels) in the parcel stock of a residential building: it takes no more parcels than that, the game
 --- throws away the rest
 local function homeRoom(stockListEntity : Engine.Entity, parcel : CargoTypeId) : number
+	-- a home removed since the reachable homes were looked up (getComponent throws for an entity that no longer exists)
+	if not api.engine.entityExists(stockListEntity) then
+		return 0
+	end
 	local stockList = api.engine.getComponent(stockListEntity, api.type.ComponentType.STOCK_LIST) as Engine.Component.StockList
 	for i, stock in ipairs(stockList ~= nil and stockList.stocks or {}) do
 		if stock.cargoType == parcel then
@@ -1213,11 +1217,22 @@ local function logSummary(s : PdState, parcel : CargoTypeId, how : string)
 	log.message(string.format("[parcel_delivery] cargo %d; %d mailboxes (found via %s), %d with source, %d residents, %d produced, %d in stock; residential buildings %d, with parcel stock %d, parcels delivered there %d",
 		parcel, boxes, how or "-", withSource, residents, produced, inStock, residential, withParcelStock, parcelsAtHomes))
 	local reach : {string} = {}
+	local now = gameTimeMs()
 	for mailbox, box in pairs(s.boxes) do
 		local sl = box.stockList >= 0 and api.engine.getComponent(box.stockList, api.type.ComponentType.STOCK_LIST) as Engine.Component.StockList or nil
-		reach[#reach + 1] = string.format("%d: %d residents, %d lines (%d with changes), %d residents in %d homes reachable with room for %.1f parcels, %.0f parcels per year, %d stocks and %d rules, %d produced, %d in stock, %.1f pending",
+		-- the productivity the stock list has, and when its rule last made a parcel (whether it produces at all)
+		local lastApply, applies = -1, 0
+		for _, ruleData in ipairs(sl ~= nil and sl.ruleDatas or {}) do
+			for _, apply in ipairs(ruleData.applyHistory or {}) do
+				applies = applies + 1
+				lastApply = math.max(lastApply, apply.time)
+			end
+		end
+		reach[#reach + 1] = string.format("%d: %d residents, %d lines (%d with changes), %d residents in %d homes reachable with room for %.1f parcels, %.0f parcels per year, productivity %.3f (set %.3f), %d applies in the history, the last %s, %d stocks and %d rules, %d produced, %d in stock, %.1f pending",
 			mailbox, box.residents or 0, box.lines or 0, box.transferLines or 0, box.reachable or 0, #(box.reachableHomes or {}), box.room or -1,
-			box.perYear or 0, sl ~= nil and #(sl.stocks or {}) or -1, sl ~= nil and #(sl.rules or {}) or -1,
+			box.perYear or 0, sl ~= nil and sl.modifiers ~= nil and sl.modifiers.productivity or -1, box.productivity or -1, applies,
+			lastApply >= 0 and string.format("%.0f s ago", (now - lastApply) / 1000) or "never",
+			sl ~= nil and #(sl.stocks or {}) or -1, sl ~= nil and #(sl.rules or {}) or -1,
 			box.produced or 0, box.stockList >= 0 and (api.engine.system.simEntityAtStockSystem.getStockCount(box.stockList, 0) or 0) or -1,
 			box.pending or 0)
 	end
@@ -1296,9 +1311,16 @@ local function runUpdate(state : GameScriptState<PdState>) : integer
 	-- every task looked up every ScanEveryPasses passes on a pass of its own (ScanTurn)
 	local turn = s.passes % ScanEveryPasses
 	if turn == ScanTurn.townNeeds then
+		local okNeeds, errNeeds : boolean, any
 		timed("townNeeds", function()
-			ensureResidentialNeeds(parcel)
+			okNeeds, errNeeds = pcall(function() : boolean
+				ensureResidentialNeeds(parcel)
+				return true
+			end)
 		end)
+		if not okNeeds then
+			log.message("[parcel_delivery] town needs failed: " .. tostring(errNeeds))
+		end
 	end
 	if turn == ScanTurn.mailboxes then
 		local ok, result : boolean, any
@@ -1385,13 +1407,28 @@ local function runUpdate(state : GameScriptState<PdState>) : integer
 			log.message("[parcel_delivery] cargo tracking failed: " .. tostring(errTrack))
 		end
 	end
+	-- the parts below may fail like the others without keeping the state from being saved
+	local okProduce, errProduce : boolean, any
 	timed("production", function()
-		produce(s, dt / millisPerDay(), now, parcel)
-	end)
-	if pd_debug.Enabled and s.passes % LogEveryPasses == 1 then
-		timed("summaryLog", function()
-			logSummary(s, parcel, how)
+		okProduce, errProduce = pcall(function() : boolean
+			produce(s, dt / millisPerDay(), now, parcel)
+			return true
 		end)
+	end)
+	if not okProduce then
+		log.message("[parcel_delivery] production failed: " .. tostring(errProduce))
+	end
+	if pd_debug.Enabled and s.passes % LogEveryPasses == 1 then
+		local okSummary, errSummary : boolean, any
+		timed("summaryLog", function()
+			okSummary, errSummary = pcall(function() : boolean
+				logSummary(s, parcel, how)
+				return true
+			end)
+		end)
+		if not okSummary then
+			log.message("[parcel_delivery] summary log failed: " .. tostring(errSummary))
+		end
 	end
 	-- the size of the state (read and written as a whole): the mailboxes and the diagnostics kept in it
 	local cargoSeen, reachableHomes, boxes = 0, 0, 0
@@ -1414,7 +1451,13 @@ end
 local script = {
 	update = function(_userParams : table, state : GameScriptState<PdState>, _dt : number) : any
 		local t0 = clock ~= nil and clock() or 0
-		local now = runUpdate(state)
+		-- An error must not leave the update: the game runs the script in its simulation step, and an error there kept the
+		-- drop boxes from producing (and, as the state was not saved, the same pass and the same error came again).
+		local ok, result = pcall(runUpdate, state)
+		local now = ok and result as integer or -1
+		if not ok then
+			log.message("[parcel_delivery] update failed: " .. tostring(result))
+		end
 		if clock ~= nil then
 			perfAdd("update", clock() - t0)
 		end

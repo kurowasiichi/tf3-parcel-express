@@ -63,6 +63,7 @@ Transport Fever 3 模組：新增貨物「包裹」。居民與商工業把包�
 - **維修設施的限制**：維修容量 0 又沒有車道時，會被拒絕建造（`neither depot nor a maintenance station`）。服務對象設成 `PERSON` 時，遊戲崩潰。
 - **人行道不能接到車道**：可連接的人行道終點落在可連接卡車車道的節點上時，遊戲崩潰（`person0 == person1`，IsValidTransition）。
 - **建設提案的清單要整份指定**：`proposal.constructionsToAdd = { ce }` 才有效。寫成 `constructionsToAdd[1] = ce`，只改到一份複本，送出的提案是空的，遊戲不做事也不報錯。建築檔名用 `parcel_delivery::/parcel_delivery/x.con`，送出用 `makeWorldBuildProposalCmd(proposal, nil, true, false)`。道路提案的清單（`edgesToAdd` 等）應該也一樣，`comp.objects` 也要先取出成變數，改完再整份指定。
+- **遊戲腳本的錯誤會讓生產停止**：update 拋出錯誤（log 有 `Error while running game script`）時，所有投遞箱的生產規則都不再產出（2026-10-27 觀察到：錯誤開始後 `applyHistory` 不再增加）。錯誤也會讓狀態沒有存回去，同一輪一直重跑。update 整個包在 `pcall` 裡，各部分也各自 `pcall`，出錯只寫 log。
 - **遊戲腳本的限制**
   - `api.cmd.sendCommand` 不能附回呼函式（`Callbacks are currently disallowed`）。
   - `forEachEntityWithComponent` 不能用在 `STOCK_LIST`。
