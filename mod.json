@@ -1,0 +1,83 @@
+{
+    "modId": "parcel_delivery",
+    "revision": 1,
+    "dependencies": null,
+    "incompatibilities": null,
+    "options": null,
+    "preRunScript": {
+        "fileName": ""
+    },
+    "runScript": {
+        "fileName": "parcel_delivery::/mod.script@runFn"
+    },
+    "postRunScript": {
+        "fileName": ""
+    },
+    "severityAdd": "None",
+    "severityRemove": "Warning",
+    "cosmetic": false,
+    "visible": true,
+    "params": [
+        {
+            "key": "parcel_delivery_radius",
+            "name": "parcel_delivery_radius_name",
+            "tooltip": "parcel_delivery_radius_tooltip",
+            "uiType": "ComboBox",
+            "values": [ "parcel_delivery_radius_1", "parcel_delivery_radius_1_25", "parcel_delivery_radius_1_5", "parcel_delivery_radius_2" ],
+            "defaultIndex": 0,
+            "yearFrom": 0,
+            "yearTo": 0
+        },
+        {
+            "key": "parcel_delivery_rate",
+            "name": "parcel_delivery_rate_name",
+            "tooltip": "parcel_delivery_rate_tooltip",
+            "uiType": "ComboBox",
+            "values": [ "parcel_delivery_rate_0_5", "parcel_delivery_rate_1", "parcel_delivery_rate_1_5", "parcel_delivery_rate_2" ],
+            "defaultIndex": 1,
+            "yearFrom": 0,
+            "yearTo": 0
+        },
+        {
+            "key": "parcel_delivery_business",
+            "name": "parcel_delivery_business_name",
+            "tooltip": "parcel_delivery_business_tooltip",
+            "uiType": "ComboBox",
+            "values": [ "parcel_delivery_off", "parcel_delivery_on" ],
+            "defaultIndex": 1,
+            "yearFrom": 0,
+            "yearTo": 0
+        },
+        {
+            "key": "parcel_delivery_business_rate",
+            "name": "parcel_delivery_business_rate_name",
+            "tooltip": "parcel_delivery_business_rate_tooltip",
+            "uiType": "ComboBox",
+            "values": [ "parcel_delivery_rate_0_5", "parcel_delivery_rate_1", "parcel_delivery_rate_1_5", "parcel_delivery_rate_2" ],
+            "defaultIndex": 1,
+            "yearFrom": 0,
+            "yearTo": 0
+        },
+        {
+            "key": "parcel_delivery_time",
+            "name": "parcel_delivery_time_name",
+            "tooltip": "parcel_delivery_time_tooltip",
+            "uiType": "ComboBox",
+            "values": [ "parcel_delivery_time_vegetables", "parcel_delivery_time_grain", "parcel_delivery_time_wool", "parcel_delivery_time_furniture" ],
+            "defaultIndex": 1,
+            "yearFrom": 0,
+            "yearTo": 0
+        },
+        {
+            "key": "parcel_delivery_demand",
+            "name": "parcel_delivery_demand_name",
+            "tooltip": "parcel_delivery_demand_tooltip",
+            "uiType": "ComboBox",
+            "values": [ "parcel_delivery_rate_0_5", "parcel_delivery_rate_0_75", "parcel_delivery_rate_1", "parcel_delivery_rate_1_25", "parcel_delivery_rate_1_5" ],
+            "defaultIndex": 2,
+            "yearFrom": 0,
+            "yearTo": 0
+        }
+    ],
+    "url": ""
+}

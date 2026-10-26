@@ -1,0 +1,38 @@
+-- An invisible model without collider: it gives the hidden parcel source (parcel_source.con.lua) a position, without
+-- blocking the street or the mailbox it stands at.
+function data()
+return {
+		boundingInfo = {
+			bbMax = { 0.5, 0.5, 0.5, },
+			bbMin = { -0.5, -0.5, 0, },
+		},
+		collider = {
+			params = {},
+			type = "NONE",
+		},
+		lods = {
+			{
+				node = {
+					name = "RootNode",
+					transf = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, },
+				},
+				visibleFrom = 0,
+				visibleTo = 1,
+			},
+		},
+		metadata = {
+			availability = {
+				yearFrom = 0,
+				yearTo = 0,
+			},
+			cost = {
+				price = 0,
+			},
+			description = {
+				description = "",
+				name = "",
+			},
+		},
+		version = 2,
+	}
+end

@@ -1,0 +1,26 @@
+{
+    "name": "Parcel Express",
+    "summary": "A new cargo, parcels: residents and businesses send them, your vans collect them at parcel delivery points and bring them to the residential districts of the towns. Intercity sorting centers carry them between towns by train or plane.",
+    "description": "Build parcel delivery points on the streets: a parcel drop box appears next to each one and collects the parcels sent by the residents and the supplied businesses in its range. Lines of box vans load the parcels there and deliver them to the residential districts of every town, whose demand is about as large as their population. Parcels earn up to 1.2x the price of other cargo when delivered fast and down to 0.8x when late. Between towns, box vans bring the parcels to an export sorting center next to a train station or an airport, which turns them into long distance parcels; trains or planes take them to an import sorting center in the other town, which turns them back into parcels for its delivery points. Like factories, the sorting centers have workplaces: with enough workers they convert 1,000 instead of 400 parcels per year. The range, the production rates, the delivery time and the parcel demand of the towns are set in the mod settings.",
+    "localization": {
+        "zh_TW": {
+            "name": "Parcel Express",
+            "summary": "新貨物「包裹」：居民與商家寄出包裹，貨車在包裹投遞處收件，送到各城鎮的住宅區。跨城包裹分揀中心讓火車和飛機在城鎮之間運送包裹。",
+            "description": "在道路上建造包裹投遞處，旁邊會自動出現包裹投遞箱，收集範圍內居民與獲得供應的商家寄出的包裹。箱型貨車路線在投遞處裝貨，送到各城鎮的住宅區，城鎮的包裹需求量約與人口相當。包裹送得快，價格最高是一般貨物的 1.2 倍；送得慢，最低 0.8 倍。跨城運送時，箱型貨車把包裹送到火車站或機場旁的出口分揀中心，轉換成長距離包裹；火車或飛機運到另一座城鎮的進口分揀中心，換回一般包裹後，再由當地的包裹投遞處派送。分揀中心和工廠一樣提供工作機會，工人足夠時，每年轉換量從 400 個提高到 1,000 個。收件範圍、產生速度、配送時間與城鎮包裹需求都在模組設定中調整。"
+        }
+    },
+    "authors": [
+        {
+            "name": "kurowasiichi",
+            "role": "CREATOR"
+        }
+    ],
+    "tags": [
+        "Script Mod",
+        "Road Station",
+        "Road",
+        "Industry",
+        "Depot"
+    ],
+    "url": ""
+}

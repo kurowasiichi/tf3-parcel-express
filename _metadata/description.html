@@ -1,0 +1,273 @@
+<h2>Parcel Express</h2>
+
+<p>Adds a new cargo, <b>parcels</b>. Residents and businesses send parcels, your vans collect them at <b>parcel delivery points</b> and bring them to the residential districts of the towns.</p>
+
+<h3>Parcels</h3>
+<ul>
+<li>Parcels are goods: every vehicle that carries goods, such as a box van, carries parcels.</li>
+<li>The residential districts of every town demand parcels, no industry is needed. The parcel demand of a town is about as large as its population.</li>
+<li>Parcel delivery points handle parcels only, both loading and unloading.</li>
+<li>The cargo stations of the base game that handle goods can only unload parcels, they cannot load them.</li>
+</ul>
+
+<h3>Parcel delivery points and drop boxes</h3>
+<p>Build a <b>parcel delivery point</b> from Road buildings → Cargo. Like the street stops of the base game it is placed on a street; three stacked cardboard boxes mark it, and it loads and unloads parcels only. The menu has two of them:</p>
+<ul>
+<li><b>Parcel delivery point (one side)</b>: vehicles stop on one side of the street, like the one-sided street stops of the base game.</li>
+<li><b>Parcel delivery point (two sides)</b>: vehicles stop on both sides of the street, like the two-sided street stops of the base game.</li>
+</ul>
+<ul>
+<li>A <b>parcel drop box</b> appears by itself on the sidewalk, about 2 m from the boxes: on the side of the stop for the one-sided delivery point, on the right side of the street for the two-sided one. It collects the parcels sent around it; the vans load them at the delivery point.</li>
+<li>Removing the delivery point removes its drop box. The drop box is not in the build menu and removes no buildings around it.</li>
+<li>Delivery points also unload: a line takes the parcels to another delivery point and unloads them for the residential districts in its range.</li>
+<li><span style="color:#FF8C00">To unload and then load parcels at the same delivery point, add the stop to the line twice in a row. Set the load of the first one to 0 %, so the vehicles unload there; the second one loads the parcels of the stop.</span></li>
+<li>A stop that only unloads can be a street cargo stop of the base game.</li>
+<li>Delivery points and the street stops of the base game are both street buildings: a street holds only one of them.</li>
+<li>The window of a drop box shows its parcel production per year. The line window shows the parcels waiting at every stop.</li>
+</ul>
+
+<h3>Intercity parcel sorting centers</h3>
+<p>Between towns, the parcels of different towns mix in the warehouses and on the trains. The <b>export sorting center</b> turns the parcels of a town into a cargo of their own, <b>parcels (long distance)</b>; at the destination the <b>import sorting center</b> turns them back into parcels for the residential districts.</p>
+<p>Both are in Road buildings → Cargo. They look like the goods warehouse of the base game; they store no other cargo and take no warehouse modules.</p>
+<table>
+<tr><th>Building</th><th>Takes</th><th>Gives</th></tr>
+<tr><td>Intercity parcel sorting center (export)</td><td>Parcels</td><td>Parcels (long distance)</td></tr>
+<tr><td>Intercity parcel sorting center (import)</td><td>Parcels (long distance)</td><td>Parcels</td></tr>
+</table>
+<ul>
+<li>Build them next to a train station or an airport, inside the cargo range of the station. A sorting center has no loading point of its own: the stations whose range covers it load and unload its cargo.</li>
+<li>Near an export center, box vans need a stop where they can unload parcels, such as a parcel delivery point or a street cargo stop of the base game. The parcels of an import center are loaded by the parcel delivery points whose range covers it.</li>
+<li>Long distance parcels are goods: goods trains, cargo planes and box vans carry them. Parcel delivery points handle parcels only, not long distance parcels.</li>
+<li>Only the import centers take long distance parcels, no town demands them.</li>
+<li>Long distance parcels have the price and the delivery time of the parcels. The time starts again after each conversion.</li>
+<li>A sorting center converts 400 parcels per year. Its input stock and its output stock hold 800 each.</li>
+<li>Like a factory, a sorting center has 20 workplaces; the workers come by public transport. When half of them (10) came to work within the last two years, the productivity rises by 150 % (2.5 times): 1,000 parcels per year.</li>
+<li>The window of a sorting center shows the cards of a factory: production, boosters, input stock and output stock.</li>
+</ul>
+
+<h3>Delivering parcels between towns</h3>
+<p>For example, parcels from town A to town B by train:</p>
+<ol>
+<li><b>Collect the parcels in town A.</b> Build parcel delivery points in town A; their drop boxes collect the parcels of the residents and businesses in their range.</li>
+<li><b>Convert them at the export center.</b> Build an export sorting center next to the train station of town A, inside the cargo range of the station. Near the sorting center, build a stop where box vans can unload, such as a parcel delivery point or a street cargo stop of the base game, with the sorting center in its range. Run a box van line that loads at the delivery points of town A and unloads at this stop. The parcels go into the export center and become parcels (long distance).</li>
+<li><b>Carry the long distance parcels by train.</b> Run a goods train line between the train stations of town A and town B. The trains load the long distance parcels of the export center at the station of town A.</li>
+<li><b>Unload them at the import center.</b> Build an import sorting center next to the train station of town B, inside the cargo range of the station. The trains unload the long distance parcels in town B and they go into the import center.</li>
+<li><b>Convert them back to parcels.</b> The import center turns the long distance parcels back into parcels and puts them into its output stock.</li>
+<li><b>Deliver them in town B.</b> Build a parcel delivery point next to the import center, with the sorting center in its range. Run a box van line that loads there and unloads at the other delivery points of town B; the residential districts in their range receive the parcels.</li>
+</ol>
+<ul>
+<li>With an airport, cargo planes take the place of the trains in step 3, and the sorting centers stand inside the cargo range of the airports.</li>
+<li>For the 150 % productivity boost, run a passenger line with a stop near the sorting center, so the workers can come by public transport.</li>
+<li>For the other direction (town B to town A), build another export center in town B and another import center in town A. Both directions can use the same train line.</li>
+</ul>
+
+<h3>Parcel production</h3>
+<p>Every drop box produces parcels from the buildings in its range.</p>
+<table>
+<tr><th>Source</th><th>At 1x</th></tr>
+<tr><td>Residents</td><td>50 parcels per 100 residents and year</td></tr>
+<tr><td>Commercial and industrial buildings</td><td>0.5 parcels per unit of cargo supplied to them</td></tr>
+</table>
+<ul>
+<li>The range is 160 m by default, the range of a street stop of the base game.</li>
+<li>A building in the range of several drop boxes counts only for the one built first, so overlapping ranges produce no extra parcels.</li>
+<li>Commercial and industrial buildings send parcels only when they are supplied: the more cargo they get, the more parcels they send.</li>
+<li>A drop box stores up to 200 parcels, so lines should collect them regularly.</li>
+</ul>
+
+<h3>Income</h3>
+<p>In the base game every cargo earns the same:</p>
+<p><code>income = 3.8 per meter × distance × cargo income setting</code></p>
+<p>The distance is the straight line from start to destination; going uphill, every meter climbed counts 8 m more. The detour and the travel time do not change the income of the base game cargos. The cargo income setting is in the advanced options of a new game, 1.0 by default.</p>
+<p>Parcels use the same distance and setting, but the price per meter depends on the time left when they arrive:</p>
+<table>
+<tr><th>Time left on arrival</th><th>Price per meter</th><th>Compared with other cargo</th></tr>
+<tr><td>100 %, delivered at once</td><td>4.55</td><td>1.2x</td></tr>
+<tr><td>75 %</td><td>4.45</td><td>1.17x</td></tr>
+<tr><td>50 %</td><td>3.80</td><td>1.0x</td></tr>
+<tr><td>25 %</td><td>3.16</td><td>0.83x</td></tr>
+<tr><td>0 %, time is up</td><td>3.05</td><td>0.8x</td></tr>
+</table>
+<p>Parcels delivered with more than half of the time left earn more than other cargo, later ones less, down to 0.8x. The length of the time is set in the mod settings.</p>
+<p>Deliveries within one town earn little because the distance is short, so delivering between towns is recommended. As the delivery time is limited, the faster the parcels are delivered, the more money they earn. Once a town has grown large it sends a lot of parcels; warehouses are recommended to gather them for delivery between towns.</p>
+
+<h3>Settings</h3>
+<table>
+<tr><th>Setting</th><th>Options</th><th>Default</th></tr>
+<tr><td>Parcel delivery range</td><td>160 / 200 / 240 / 320 m</td><td>160 m</td></tr>
+<tr><td>Parcel production</td><td>0.5x / 1x / 1.5x / 2x</td><td>1x</td></tr>
+<tr><td>Parcels from businesses</td><td>On / Off</td><td>On</td></tr>
+<tr><td>Parcels from businesses: rate</td><td>0.5x / 1x / 1.5x / 2x</td><td>1x</td></tr>
+<tr><td>Parcel delivery time</td><td>that of vegetables, grain, wool or furniture</td><td>grain</td></tr>
+<tr><td>Parcel demand of the towns</td><td>0.5x / 0.75x / 1x / 1.25x / 1.5x</td><td>1x</td></tr>
+</table>
+<ul>
+<li>The settings are chosen in the mod settings when starting a new game.</li>
+<li>The delivery times from shortest to longest: vegetables, grain, wool, furniture. The longer the time, the slower the price falls.</li>
+<li>Delivery points already built take a new range when they are rebuilt.</li>
+</ul>
+
+<h3>Compatibility and notes</h3>
+<p>The mod adds its own cargo, cargo class and buildings and changes no files of the base game. It may conflict with mods that:</p>
+<ul>
+<li><b>Replace the window of empty constructions.</b> This mod replaces it to show the drop box window without the close-up view; other constructions keep the window of the base game. With two such mods only one of them takes effect.</li>
+<li><b>Change the economy or the cargo demand of the towns.</b> The parcel demand is added to the residential districts of every economy. Mods that replace the economy, change the demand of the residential districts or create towns without residential districts may leave towns without parcel demand. A mod that adds a cargo category also named "parcel" takes its place.</li>
+<li><b>Change the cargo classes of vehicles.</b> Parcels are goods; vehicles that no longer carry goods no longer carry parcels.</li>
+<li><b>Change or extend the street stops.</b> Delivery points are street stops: a street holds either a delivery point or another street stop. Mods that change how street stops are built may affect the delivery points; test them together.</li>
+<li><b>Remove buildings without an owner.</b> The drop boxes belong to no player. If a tool removes one, the mod builds it again shortly, but the parcels stored in it are lost.</li>
+<li><b>Change the cargo income.</b> The parcel prices are based on the cargo income of the base game; with another income formula the prices in the table no longer apply.</li>
+</ul>
+<ul>
+<li><b>Do not remove the mod from a running game.</b> The parcels, delivery points and drop boxes in the savegame refer to the mod.</li>
+<li>Line windows show a parcel card next to the cards of other mods; they are listed side by side.</li>
+</ul>
+
+<h3>Patch notes</h3>
+<p><b>2026-10-24</b></p>
+<ul>
+<li>Added the intercity parcel sorting centers (export and import) in Road buildings → Cargo. The export center turns the parcels of a town into the new cargo <b>parcels (long distance)</b>, the import center turns them back into parcels, so the parcels of different towns no longer mix in warehouses and on trains between towns.</li>
+<li>The sorting centers look like the goods warehouse of the base game. Each converts 400 parcels per year and its input and output stocks hold 800 each.</li>
+<li>Like a factory, a sorting center has 20 workplaces. With enough workers its productivity rises by 150 % (2.5 times), 1,000 parcels per year.</li>
+<li>The window of a sorting center shows the cards of a factory: production, boosters, input stock and output stock.</li>
+<li>Long distance parcels have their own icon, the price of the parcels, and the delivery time set in the mod settings. Goods trains, cargo planes and box vans carry them; parcel delivery points do not handle them, and no town demands them.</li>
+<li>The one-sided parcel delivery point is back in the build menu. The two delivery points are now named <b>Parcel delivery point (one side)</b> and <b>Parcel delivery point (two sides)</b>.</li>
+<li>New setting <b>Parcel demand of the towns</b>: 0.5x, 0.75x, 1x, 1.25x or 1.5x the parcel demand of the residential districts (1x by default). It applies to new games only.</li>
+</ul>
+
+<hr>
+
+<h2>Parcel Express</h2>
+
+<p>加入新貨物「<b>包裹</b>」。城鎮居民與商家寄出包裹，貨車在「<b>包裹投遞處</b>」收件，再送到各城鎮的住宅區。</p>
+
+<h3>包裹</h3>
+<ul>
+<li>包裹屬於一般貨物，能載運一般貨物的車輛都能載運包裹，例如箱型貨車。</li>
+<li>每個城鎮的住宅區都需要包裹，不需要任何工廠供應。城鎮的包裹需求量約與人口相當。</li>
+<li>包裹投遞處只能處理包裹這一種貨物，可以同時裝載與卸載。</li>
+<li>原版收一般貨物的貨運站僅能卸載包裹，無法裝載。</li>
+</ul>
+
+<h3>包裹投遞處與投遞箱</h3>
+<p>在「道路建築 → 貨運」選單建造<b>包裹投遞處</b>。它和原版的路邊站牌一樣蓋在道路上，旁邊堆著三個紙箱，只裝卸包裹。選單裡有兩種：</p>
+<ul>
+<li><b>包裹投遞處（單側）</b>：只在道路的一側停靠，和原版的單側路邊站牌相同。</li>
+<li><b>包裹投遞處（雙側）</b>：道路兩側都能停靠，和原版的雙側路邊站牌相同。</li>
+</ul>
+<ul>
+<li>蓋好後，人行道上會自動出現一個<b>包裹投遞箱</b>，位置在紙箱堆旁約 2 公尺處。單側版的投遞箱在站牌那一側，雙側版的在道路右側。投遞箱負責收集附近居民與商家寄出的包裹，貨車在包裹投遞處取件。</li>
+<li>拆除包裹投遞處時，投遞箱一起拆除。投遞箱不在建造選單中，也不會拆除周圍建築。</li>
+<li>包裹投遞處也能卸貨：路線把包裹載到其他包裹投遞處卸下，送給該處範圍內的住宅區。</li>
+<li><span style="color:#FF8C00">同一個包裹投遞處要先卸貨再裝貨時，在路線中把這一站連續加入兩次。第一次的裝載量設為 0%，車輛才會在這裡卸下包裹；第二次再裝上這裡的包裹。</span></li>
+<li>只卸貨、不裝貨的站，可以直接使用原版的路邊貨運停靠站。</li>
+<li>包裹投遞處和原版路邊停靠站都是蓋在道路上的道路建築，同一條道路上只能存在其中一種。</li>
+<li>點選投遞箱可以看到包裹生產卡片，上面寫著每年約產生多少包裹。點選路線可以看到每一站有多少包裹等著上車。</li>
+</ul>
+
+<h3>跨城包裹分揀中心</h3>
+<p>跨城運送時，各城鎮的包裹在倉庫和火車上會混在一起。<b>出口分揀中心</b>把城鎮的包裹轉換成另一種貨物「包裹（長距離運輸）」，運到目的地後，由<b>進口分揀中心</b>換回一般包裹，再送到住宅區。</p>
+<p>兩種分揀中心都在「道路建築 → 貨運」選單，外觀是原版的貨物倉庫。它不能存放其他貨物，也不能加裝倉庫模組。</p>
+<table>
+<tr><th>設施</th><th>接收</th><th>產出</th></tr>
+<tr><td>跨城包裹分揀中心（出口）</td><td>包裹</td><td>包裹（長距離運輸）</td></tr>
+<tr><td>跨城包裹分揀中心（進口）</td><td>包裹（長距離運輸）</td><td>包裹</td></tr>
+</table>
+<ul>
+<li>蓋在火車站或機場旁邊，位置要在車站的貨物範圍內。分揀中心沒有自己的裝卸點，貨物都由範圍涵蓋它的車站裝卸。</li>
+<li>出口分揀中心附近要有貨車能卸下包裹的站，例如包裹投遞處或原版的路邊貨運停靠站。進口分揀中心產出的包裹，由範圍涵蓋它的包裹投遞處裝上箱型貨車。</li>
+<li>包裹（長距離運輸）屬於一般貨物，貨運列車、貨機和箱型貨車都能載運。包裹投遞處只處理包裹，不裝卸長距離包裹。</li>
+<li>只有進口分揀中心接收長距離包裹，城鎮對它沒有需求。</li>
+<li>長距離包裹的價格和配送時間與包裹相同。轉換後的貨物重新計算時限。</li>
+<li>每座分揀中心每年轉換 400 個包裹，投入與產出庫存各可放 800 個。</li>
+<li>分揀中心和工廠一樣提供 20 個工作機會，工人要搭乘大眾運輸前來。最近兩年內來上班的工人達到一半（10 人）時，效率固定提高 150%（變成原本的 2.5 倍），每年轉換 1,000 個。</li>
+<li>點選分揀中心會看到和工廠相同的卡片：生產、加速效果、投入庫存、產出庫存。</li>
+</ul>
+
+<h3>跨城運送包裹</h3>
+<p>以火車把城鎮 A 的包裹送到城鎮 B 為例：</p>
+<ol>
+<li><b>在城鎮 A 收集包裹。</b>在城鎮 A 蓋包裹投遞處，旁邊的投遞箱會收集範圍內居民和商家寄出的包裹。</li>
+<li><b>送到出口分揀中心轉換。</b>在城鎮 A 的火車站旁蓋出口分揀中心，位置要在火車站的貨物範圍內。分揀中心附近再蓋一個貨車能卸貨的站，例如包裹投遞處或原版的路邊貨運停靠站，範圍要涵蓋分揀中心。開一條箱型貨車路線，在城鎮 A 的包裹投遞處裝貨，到這個站卸貨。包裹送進出口分揀中心後，轉換成包裹（長距離運輸）。</li>
+<li><b>火車載運長距離包裹。</b>開一條貨運列車路線往返城鎮 A 與城鎮 B 的火車站。火車在城鎮 A 的火車站裝上出口分揀中心的長距離包裹。</li>
+<li><b>卸貨到進口分揀中心。</b>在城鎮 B 的火車站旁蓋進口分揀中心，位置要在火車站的貨物範圍內。火車在城鎮 B 卸下長距離包裹，貨物送進進口分揀中心。</li>
+<li><b>轉換回一般包裹。</b>進口分揀中心把長距離包裹換回一般包裹，放進產出庫存。</li>
+<li><b>派送到城鎮 B。</b>在進口分揀中心旁蓋包裹投遞處，範圍要涵蓋分揀中心。開一條箱型貨車路線，在這裡裝貨，到城鎮 B 其他的包裹投遞處卸貨，範圍內的住宅區就會收到包裹。</li>
+</ol>
+<ul>
+<li>改用機場時，步驟 3 的火車換成貨機，分揀中心蓋在機場的貨物範圍內。</li>
+<li>想讓分揀中心的效率提高 150%，開一條載客路線，在分揀中心附近設站，讓工人搭車上班。</li>
+<li>反方向（城鎮 B 寄往城鎮 A）要在城鎮 B 另蓋出口分揀中心、在城鎮 A 另蓋進口分揀中心，兩個方向可以共用同一條火車路線。</li>
+</ul>
+
+<h3>包裹的產生方式</h3>
+<p>每個投遞箱依服務範圍內的建築產生包裹。</p>
+<table>
+<tr><th>來源</th><th>1 倍時的產量</th></tr>
+<tr><td>住宅區居民</td><td>每 100 位居民每年 50 個包裹</td></tr>
+<tr><td>商業區與工業區</td><td>每供應 1 單位貨物，產生 0.5 個包裹</td></tr>
+</table>
+<ul>
+<li>範圍預設 160 公尺，和原版路邊站牌相同。</li>
+<li>一棟建築同時在好幾個投遞箱的範圍內時，只算給最早蓋好的那一個，重疊的範圍不會重複產生包裹。</li>
+<li>商業區與工業區要先收到貨物才會寄件，原版貨物送得越多，寄出的包裹越多。</li>
+<li>投遞箱最多存放 200 個包裹，路線要定期來載。</li>
+</ul>
+
+<h3>價格計算</h3>
+<p>原版每一種貨物的價格都一樣：</p>
+<p><code>收入 = 每公尺 3.8 × 運送距離 × 貨物收入難度倍率</code></p>
+<p>運送距離取起點到終點的直線距離；往上坡送時，每爬升 1 公尺額外加算 8 公尺。實際繞了多少路、花了多少時間，都不影響原版貨物的收入。貨物收入難度倍率是開局進階選項中的「貨物收入」，預設 1.0。</p>
+<p>包裹的距離與難度倍率和原版相同，每公尺的價格則依送達時的剩餘時限而變：</p>
+<table>
+<tr><th>送達時剩餘時限</th><th>每公尺價格</th><th>相當於原版貨物</th></tr>
+<tr><td>100%，剛寄出就送達</td><td>4.55</td><td>1.2 倍</td></tr>
+<tr><td>75%</td><td>4.45</td><td>1.17 倍</td></tr>
+<tr><td>50%</td><td>3.80</td><td>1.0 倍</td></tr>
+<tr><td>25%</td><td>3.16</td><td>0.83 倍</td></tr>
+<tr><td>0%，時限用完</td><td>3.05</td><td>0.8 倍</td></tr>
+</table>
+<p>剩餘時限超過一半時送達，價格高於原版貨物；超過一半時間才送到，價格低於原版貨物，最低 0.8 倍。時限長短由模組設定「包裹配送時間」決定。</p>
+<p>在同一座城市內配送，會因為距離過近金額較少，推薦跨城市運送；由於配送時間有限，盡可能快速配送包裹可以賺到更多的錢。城市發展茁壯以後，會產生大量包裹，建議使用倉庫進行跨城市的集運配送。</p>
+
+<h3>設定</h3>
+<table>
+<tr><th>設定</th><th>選項</th><th>預設</th></tr>
+<tr><td>包裹配送範圍</td><td>160／200／240／320 公尺</td><td>160 公尺</td></tr>
+<tr><td>包裹產生速度</td><td>0.5／1／1.5／2 倍</td><td>1 倍</td></tr>
+<tr><td>商業與工業寄件</td><td>開啟／關閉</td><td>開啟</td></tr>
+<tr><td>商業與工業寄件速度</td><td>0.5／1／1.5／2 倍</td><td>1 倍</td></tr>
+<tr><td>包裹配送時間</td><td>與蔬菜、穀物、羊毛或家具相同</td><td>穀物</td></tr>
+<tr><td>城鎮包裹需求</td><td>0.5／0.75／1／1.25／1.5 倍</td><td>1 倍</td></tr>
+</table>
+<ul>
+<li>開新遊戲時在模組設定選擇。</li>
+<li>配送時間的四個選項由短到長是蔬菜、穀物、羊毛、家具。時限越長，價格下降得越慢。</li>
+<li>已蓋好的包裹投遞處要拆掉重建，才會套用新的範圍。</li>
+</ul>
+
+<h3>相容性與注意事項</h3>
+<p>本模組新增自己的貨物、貨物類別與建築，不修改原版檔案。下列類型的模組可能與本模組衝突：</p>
+<ul>
+<li><b>替換空建築視窗的模組。</b>本模組替換了這個視窗，讓投遞箱的視窗不顯示鏡頭特寫，其他建築照原版顯示。兩個模組都替換時，只有其中一個會生效。</li>
+<li><b>修改經濟設定或城鎮貨物需求的模組。</b>包裹需求加在每一種經濟設定的住宅區上。替換經濟設定、修改住宅區需求，或產生沒有住宅區的城鎮的模組，可能讓城鎮不再需要包裹。另一個模組也新增名為「parcel」的貨物分類時，會取代本模組的分類。</li>
+<li><b>修改車輛可載運貨物類別的模組。</b>包裹屬於一般貨物，車輛不再載運一般貨物時，也就無法載運包裹。</li>
+<li><b>修改或擴充路邊停靠站的模組。</b>包裹投遞處屬於路邊停靠站，同一條道路上只能存在包裹投遞處或其他停靠站其中一種。改變停靠站建造方式的模組可能影響包裹投遞處，建議一起測試。</li>
+<li><b>自動拆除無主建築的模組。</b>投遞箱不屬於任何玩家。被拆掉後，本模組很快會重新蓋回來，但箱內存放的包裹會消失。</li>
+<li><b>修改貨物收入公式的模組。</b>包裹價格以原版貨物收入為基礎，換成其他公式後，上面價格表的數字就不再適用。</li>
+</ul>
+<ul>
+<li><b>遊戲進行中請勿移除本模組。</b>存檔裡的包裹、包裹投遞處與投遞箱都引用本模組的檔案。</li>
+<li>路線視窗的包裹卡片會和其他模組的卡片並列顯示。</li>
+</ul>
+
+<h3>更新紀錄</h3>
+<p><b>2026-10-24</b></p>
+<ul>
+<li>「道路建築 → 貨運」選單新增跨城包裹分揀中心（出口、進口）。出口分揀中心把城鎮的包裹轉換成新貨物<b>包裹（長距離運輸）</b>，進口分揀中心再換回一般包裹。各城鎮的包裹在倉庫和城際火車上不會再混在一起。</li>
+<li>分揀中心的外觀是原版貨物倉庫，每年轉換 400 個包裹，投入與產出庫存各可放 800 個。</li>
+<li>分揀中心和工廠一樣提供 20 個工作機會，工人足夠時效率提高 150%（變成原本的 2.5 倍），每年轉換 1,000 個。</li>
+<li>點選分揀中心會看到和工廠相同的卡片：生產、加速效果、投入庫存、產出庫存。</li>
+<li>長距離包裹有自己的圖示，價格與包裹相同，配送時間依模組設定。貨運列車、貨機和箱型貨車都能載運；包裹投遞處不處理這種貨物，城鎮也沒有需求。</li>
+<li>單側的包裹投遞處重新加回建造選單，兩種投遞處分別命名為<b>包裹投遞處（單側）</b>與<b>包裹投遞處（雙側）</b>。</li>
+<li>新增設定<b>城鎮包裹需求</b>：住宅區包裹需求可選 0.5、0.75、1、1.25 或 1.5 倍，預設 1 倍，只在開新遊戲時套用。</li>
+</ul>
