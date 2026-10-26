@@ -6,6 +6,7 @@ Transport Fever 3 模組：新增貨物「包裹」。居民與商工業把包�
 
 - 程式用 Teal（`.tl`）撰寫。型別檢查：`powershell -ExecutionPolicy Bypass -File tools\check.ps1`。執行前先把 `C:\Users\kurow\tools\tl\tl-0.24.7-windows-x86_64` 加進 PATH。
 - 部署：`powershell -ExecutionPolicy Bypass -File tools\deploy.ps1`，預設部署到 `staging_area`。型別檢查通過才部署。
+- 效能量測：遊戲腳本每 60 秒遊戲時間寫一行 `[parcel_delivery] perf`（各部分次數／平均／最長毫秒、腳本佔現實時間的 `share`、道路段數與城鎮建築數等數量）。`tools\perf.ps1` 匯總目前的 log，`-Save <名稱>` 存到 `perf\<名稱>.csv`，`-Compare` 並列所有存檔。比較優化時用同一個存檔、同一個遊戲速度，各跑 5 分鐘以上。
 - 同一個模組 ID 同時存在於 `staging_area` 和 `local\mods` 時，遊戲載入的是 staging 的版本。log 裡會出現 `modHubId=StagingArea,<modId>`。
 - 遊戲 log：`C:\Program Files (x86)\Steam\userdata\84279570\3493540\local\crash_dump\stdout.txt`，用 `[parcel_delivery]` 篩選。
 - 遊戲本體在 `D:\SteamLibrary\steamapps\common\Transport Fever 3`。型別定義在 `api\tealdef` 和 `base\tealdef`，原版腳本多半包在 `base\content\*.zip` 裡。
@@ -79,5 +80,5 @@ Transport Fever 3 模組：新增貨物「包裹」。居民與商工業把包�
   - 倉庫模型、地面、圍籬是否完整，庫存模型是否隨庫存顯示貨物。
   - 四張卡片是否都正常顯示。
   - 進口產出的包裹是否可能被路由到其他城鎮的出口分揀中心。
-- **效能優化（已退回）**：2026-10-27 試過一輪效能優化（除錯開關與 `deploy.ps1 -Release`、建造事件觸發的投遞處掃描、城鎮建築網格查找與 30 秒間隔、新投遞箱初始最低效率、除錯版計時 log）。使用者覺得 FPS 反而變低，原因沒確認，整批退回優化前的程式。優化版完整保存在 git 分支 `performance-optimization`（`git diff main performance-optimization` 可看全部差異），要再優化時先從那裡挑單項、逐項測 FPS。
+- **效能優化（已退回）**：2026-10-27 試過一輪效能優化（除錯開關與 `deploy.ps1 -Release`、建造事件觸發的投遞處掃描、城鎮建築網格查找與 30 秒間隔、新投遞箱初始最低效率、除錯版計時 log）。使用者覺得 FPS 反而變低，原因沒確認，整批退回優化前的程式。優化版完整保存在 git 分支 `performance-optimization`（`git diff main performance-optimization` 可看全部差異），要再優化時先從那裡挑單項、逐項測 FPS。2026-10-27 起在 main 逐項加回，每一項一個 commit，量測結果存在 `perf\`。
 - **城市包裹需求係數**：改成 2 之後的實際效果還沒驗證。

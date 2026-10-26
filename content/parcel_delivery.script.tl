@@ -72,6 +72,80 @@ local BusinessRateParam <const> = "parcel_delivery_business_rate"
 --- calendar day length used when the game speed gives none
 local FallbackMillisPerDay <const> = 2000
 
+-- performance metrics ------------------------------------------------------------------------------------------------
+
+-- The time the update takes, written to the log as a "perf" line every PerfLogMs of game time, to compare the
+-- optimizations (tools\perf.ps1 sums the lines up). Kept per Lua state: each update thread has its own, the line names
+-- it. The time is that of os.clock (on Windows the elapsed time); without it only the counts are logged.
+local clock : function() : number = os ~= nil and os.clock or nil
+local PerfLogMs <const> = 60000
+local perfLuaState = string.match(tostring({}), "0x%x+") or "?"
+
+local record Perf
+	--- game time (ms) and os.clock at the start of the period, -1 before the first update
+	since : integer
+	sinceClock : number
+	--- update calls in the period
+	frames : integer
+	--- by part: runs, total time (s), longest time (s)
+	parts : {string : {number}}
+	--- by name: the last value
+	counts : {string : integer}
+end
+
+local perf : Perf = { since = -1, sinceClock = 0, frames = 0, parts = {}, counts = {} }
+
+local function perfAdd(part : string, t : number)
+	local entry = perf.parts[part]
+	if entry == nil then
+		entry = { 0, 0, 0 }
+		perf.parts[part] = entry
+	end
+	entry[1] = entry[1] + 1
+	entry[2] = entry[2] + t
+	entry[3] = math.max(entry[3], t)
+end
+
+--- runs fn and adds its time to the part
+local function timed(part : string, fn : function())
+	if clock == nil then
+		fn()
+		return
+	end
+	local t0 = clock()
+	fn()
+	perfAdd(part, clock() - t0)
+end
+
+local function perfCount(name : string, n : integer)
+	perf.counts[name] = n
+end
+
+--- writes the line of the period ending at the game time now and starts the next one
+local function perfLog(now : integer)
+	local elapsed = clock ~= nil and clock() - perf.sinceClock or 0
+	local update = perf.parts["update"]
+	local parts : {string} = {}
+	for part, entry in pairs(perf.parts) do
+		parts[#parts + 1] = string.format("%s=%dx/%.3fms/%.3fms", part, math.floor(entry[1]), entry[2] / math.max(1, entry[1]) * 1000,
+			entry[3] * 1000)
+	end
+	table.sort(parts)
+	local counts : {string} = {}
+	for name, n in pairs(perf.counts) do
+		counts[#counts + 1] = string.format("%s=%d", name, n)
+	end
+	table.sort(counts)
+	log.message(string.format("[parcel_delivery] perf lua=%s game=%ds real=%.1fs frames=%d total=%.1fms share=%.3f%% | %s | %s",
+		perfLuaState, math.floor((now - perf.since) / 1000), elapsed, perf.frames, update ~= nil and update[2] * 1000 or 0,
+		update ~= nil and elapsed > 0 and update[2] / elapsed * 100 or 0,
+		clock ~= nil and table.concat(parts, " ") or "no clock", table.concat(counts, " ")))
+	perf.since = now
+	perf.sinceClock = clock ~= nil and clock() or 0
+	perf.frames = 0
+	perf.parts = {}
+end
+
 local function newState() : PdState
 	return { version = StateVersion, boxes = {}, lastTime = -1, passes = 0, consumedUntil = -1 }
 end
@@ -373,10 +447,12 @@ local function pairDeliveryPoints(s : PdState)
 	-- edges do.
 	local edgeObjects : {{Engine.Entity, Engine.Component.EdgeObject, Engine.Component.BaseEdge}} = {}
 	local edgesDone : {Engine.Entity : boolean} = {}
+	local edgeCount = 0
 	for _, edges in pairs(api.engine.system.streetSystem.getNode2StreetEdgeMap() or {}) do
 		for _, edge in ipairs(edges) do
 			if not edgesDone[edge] then
 				edgesDone[edge] = true
+				edgeCount = edgeCount + 1
 				local e = api.engine.getComponent(edge, api.type.ComponentType.BASE_EDGE) as Engine.Component.BaseEdge
 				for _, object in ipairs(e ~= nil and e.objects or {}) do
 					local eo = api.engine.getComponent(object[1], api.type.ComponentType.EDGE_OBJECT) as Engine.Component.EdgeObject
@@ -394,6 +470,8 @@ local function pairDeliveryPoints(s : PdState)
 		end
 		log.message(string.format("[parcel_delivery] edge objects: %d; %s", #edgeObjects, table.concat(samples, "; ")))
 	end
+	perfCount("streetEdges", edgeCount)
+	perfCount("edgeObjects", #edgeObjects)
 	local points : {Engine.Entity : boolean} = {}
 	local pair2 = PairDistance * PairDistance
 	-- The delivery points, each once (a two-sided stop is listed on both sides of its edge), those on the right side of
@@ -490,7 +568,9 @@ local function scanBuildings(s : PdState) : {Engine.Entity : integer}
 	local radius = collectionRadius()
 	local radius2 = radius * radius
 	local residential = api.type["enum"].LandUseType.RESIDENTIAL
+	local buildingCount = 0
 	api.engine.forEachEntityWithComponent(function(entity : Engine.Entity)
+		buildingCount = buildingCount + 1
 		local building = api.engine.getComponent(entity, api.type.ComponentType.TOWN_BUILDING) as Engine.Component.TownBuilding
 		local pc = personCapacityOf(building and building.personCapacity)
 		if pc == nil then
@@ -525,6 +605,7 @@ local function scanBuildings(s : PdState) : {Engine.Entity : integer}
 			table.insert(first.suppliers, building.stockList)
 		end
 	end, api.type.ComponentType.TOWN_BUILDING)
+	perfCount("townBuildings", buildingCount)
 	return homes
 end
 
@@ -536,7 +617,9 @@ end
 local function updateReachable(s : PdState, homes : {Engine.Entity : integer})
 	local catchables : {Engine.Entity : {Engine.Entity : boolean}} = {}
 	local stockToStations : {Engine.Entity : {Engine.Entity}} = {}
+	local stationCount = 0
 	api.engine.forEachEntityWithComponent(function(station : Engine.Entity)
+		stationCount = stationCount + 1
 		local set : {Engine.Entity : boolean} = {}
 		for _, entity in ipairs(api.engine.system.catchmentAreaSystem.getStationCatchables(station, true) or {}) do
 			set[entity] = true
@@ -549,6 +632,7 @@ local function updateReachable(s : PdState, homes : {Engine.Entity : integer})
 		end
 		catchables[station] = set
 	end, api.type.ComponentType.STATION)
+	perfCount("stations", stationCount)
 
 	for mailbox, box in pairs(s.boxes) do
 		local sources : {Engine.Entity : boolean} = {}
@@ -1044,87 +1128,149 @@ end
 
 -- game script --------------------------------------------------------------------------------------------------------
 
-local script = {
-	update = function(_userParams : table, state : GameScriptState<PdState>, _dt : number) : any
-		local s = state:get()
-		if s == nil or s.version ~= StateVersion then
-			s = newState()
-			log.message("[parcel_delivery] state initialized")
-		end
-		local now = gameTimeMs()
-		if s.lastTime < 0 or now < s.lastTime then
-			s.lastTime = now
-			state:set(s)
-			return
-		end
-		local dt = now - s.lastTime
-		if dt < PassIntervalMs then
-			return
-		end
+--- One update call (every frame); returns the game time, -1 if it was not read. The parts are timed for the perf line.
+local function runUpdate(state : GameScriptState<PdState>) : integer
+	local s : PdState
+	timed("stateGet", function()
+		s = state:get()
+	end)
+	if s == nil or s.version ~= StateVersion then
+		s = newState()
+		log.message("[parcel_delivery] state initialized")
+	end
+	local now = gameTimeMs()
+	if s.lastTime < 0 or now < s.lastTime then
 		s.lastTime = now
-		s.passes = (s.passes or 0) + 1
+		state:set(s)
+		return now
+	end
+	local dt = now - s.lastTime
+	if dt < PassIntervalMs then
+		return now
+	end
+	s.lastTime = now
+	s.passes = (s.passes or 0) + 1
 
-		local parcel = parcelCargoId()
-		if parcel < 0 then
-			if s.passes % LogEveryPasses == 1 then
-				log.message("[parcel_delivery] parcel cargo not found")
-			end
-			state:set(s)
-			return
+	local parcel = parcelCargoId()
+	if parcel < 0 then
+		if s.passes % LogEveryPasses == 1 then
+			log.message("[parcel_delivery] parcel cargo not found")
 		end
-		local how : string = nil
-		if s.passes % ScanEveryPasses == 1 then
+		state:set(s)
+		return now
+	end
+	local how : string = nil
+	if s.passes % ScanEveryPasses == 1 then
+		timed("townNeeds", function()
 			ensureResidentialNeeds(parcel)
-			local ok, result = pcall(updatePosts, s, parcel)
-			if ok then
-				how = result as string
-			else
-				log.message("[parcel_delivery] parcel post update failed: " .. tostring(result))
-			end
-			for mailbox, box in pairs(s.boxes) do
-				if box.drop and not box.stopDone then
-					local okCheck, errCheck = pcall(function() : boolean
-						checkDropBox(mailbox, box)
-						return true
-					end)
-					if not okCheck then
-						box.stopDone = true
-						log.message("[parcel_delivery] checking drop box " .. tostring(mailbox) .. " failed: " .. tostring(errCheck))
-					end
+		end)
+		local ok, result : boolean, any
+		timed("mailboxes", function()
+			ok, result = pcall(updatePosts, s, parcel)
+		end)
+		if ok then
+			how = result as string
+		else
+			log.message("[parcel_delivery] parcel post update failed: " .. tostring(result))
+		end
+		for mailbox, box in pairs(s.boxes) do
+			if box.drop and not box.stopDone then
+				local okCheck, errCheck = pcall(function() : boolean
+					checkDropBox(mailbox, box)
+					return true
+				end)
+				if not okCheck then
+					box.stopDone = true
+					log.message("[parcel_delivery] checking drop box " .. tostring(mailbox) .. " failed: " .. tostring(errCheck))
 				end
 			end
-			local okPair, errPair = pcall(function() : boolean
+		end
+		local okPair, errPair : boolean, any
+		timed("deliveryPoints", function()
+			okPair, errPair = pcall(function() : boolean
 				pairDeliveryPoints(s)
 				return true
 			end)
-			if not okPair then
-				log.message("[parcel_delivery] drop boxes of the delivery points failed: " .. tostring(errPair))
-			end
-			local homes = scanBuildings(s)
-			local okReach, errReach = pcall(function() : boolean
+		end)
+		if not okPair then
+			log.message("[parcel_delivery] drop boxes of the delivery points failed: " .. tostring(errPair))
+		end
+		local homes : {Engine.Entity : integer}
+		timed("townBuildings", function()
+			homes = scanBuildings(s)
+		end)
+		local okReach, errReach : boolean, any
+		timed("reachable", function()
+			okReach, errReach = pcall(function() : boolean
 				updateReachable(s, homes)
 				return true
 			end)
-			if not okReach then
-				log.message("[parcel_delivery] reachable residents failed: " .. tostring(errReach))
-			end
-			local okBoost, errBoost = pcall(fixSortingBoost)
-			if not okBoost then
-				log.message("[parcel_delivery] sorting center boost failed: " .. tostring(errBoost))
-			end
+		end)
+		if not okReach then
+			log.message("[parcel_delivery] reachable residents failed: " .. tostring(errReach))
 		end
-		local okTrack, errTrack = pcall(function() : boolean
+		local okBoost, errBoost : boolean, any
+		timed("sortingBoost", function()
+			okBoost, errBoost = pcall(fixSortingBoost)
+		end)
+		if not okBoost then
+			log.message("[parcel_delivery] sorting center boost failed: " .. tostring(errBoost))
+		end
+	end
+	local okTrack, errTrack : boolean, any
+	timed("cargoTracking", function()
+		okTrack, errTrack = pcall(function() : boolean
 			trackCargo(s)
 			return true
 		end)
-		if not okTrack and s.passes % LogEveryPasses == 1 then
-			log.message("[parcel_delivery] cargo tracking failed: " .. tostring(errTrack))
-		end
+	end)
+	if not okTrack and s.passes % LogEveryPasses == 1 then
+		log.message("[parcel_delivery] cargo tracking failed: " .. tostring(errTrack))
+	end
+	timed("production", function()
 		produce(s, dt / millisPerDay(), now, parcel)
-		if s.passes % LogEveryPasses == 1 then
+	end)
+	if s.passes % LogEveryPasses == 1 then
+		timed("summaryLog", function()
 			logSummary(s, parcel, how)
+		end)
+	end
+	-- the size of the state (read and written as a whole): the mailboxes and the diagnostics kept in it
+	local cargoSeen, reachableHomes, boxes = 0, 0, 0
+	for _, box in pairs(s.boxes) do
+		boxes = boxes + 1
+		for _ in pairs(box.cargoSeen or {}) do
+			cargoSeen = cargoSeen + 1
 		end
+		reachableHomes = reachableHomes + #(box.reachableHomes or {})
+	end
+	perfCount("boxes", boxes)
+	perfCount("stateCargoSeen", cargoSeen)
+	perfCount("stateReachableHomes", reachableHomes)
+	timed("stateSet", function()
 		state:set(s)
+	end)
+	return now
+end
+
+local script = {
+	update = function(_userParams : table, state : GameScriptState<PdState>, _dt : number) : any
+		local t0 = clock ~= nil and clock() or 0
+		local now = runUpdate(state)
+		if clock ~= nil then
+			perfAdd("update", clock() - t0)
+		end
+		perf.frames = perf.frames + 1
+		if now >= 0 then
+			if perf.since < 0 or now < perf.since then
+				perf.since = now
+				perf.sinceClock = clock ~= nil and clock() or 0
+				perf.frames = 0
+				perf.parts = {}
+			elseif now - perf.since >= PerfLogMs then
+				perfLog(now)
+			end
+		end
 	end,
 }
 
