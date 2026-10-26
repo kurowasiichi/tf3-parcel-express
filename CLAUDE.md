@@ -31,6 +31,7 @@ Transport Fever 3 模組：新增貨物「包裹」。居民與商工業把包�
   - 每 5 輪（10 秒）一次的工作各排在不同輪次（`ScanTurn`）：城鎮需求、找投遞箱、找包裹投遞處、分揀中心加速、除錯診斷，不擠在同一輪。
   - 每年產量 = 居民 × 0.5 × 倍率 ＋ 商工業消耗量 × 0.5 × 倍率。兩個倍率的選項都是 0.5／1／1.5／2，預設 1。
   - 換算成生產效率送給庫存，效率最低 0.001。
+  - 投遞處配對最近的投遞箱（12 m 內，同一位置時取最早蓋的）。12 m 內沒被任何投遞處配對的投遞箱是多的，直接拆除。2026-10-27 發現測試存檔 24 個投遞處各有 2 個疊在同一位置的投遞箱，推測是遊戲在兩個 Lua 狀態同時執行 update、對同一投遞處各送出一次建造。
   - 新的投遞箱若 12 m 內沒有道路就拆掉。配送點由玩家自己蓋。腳本自動加配送點的做法已放棄：建設提案檢查通過，送出後卻從沒建起來。
 - **跨城包裹分揀中心**（`parcel_sorting.script.tl`、`parcel_sorting_export.con.lua`、`parcel_sorting_import.con.lua`）
   - 模型是原版貨物倉庫：腳本自己依序呼叫倉庫 `updateFn`、貨物模組 `modules.script@goods.updateFn`（第一個插槽）和倉庫的 `terminateConstructionHook`，因為建築沒有 `modules` 參數時，遊戲不會套用模組。結果只留 `subconstructions`、`snapPoint`，拿掉 `warehouse` 元件與存放庫存，沒有插槽，玩家不能加模組。貨物模組的庫存模型分給投入與產出庫存當 `loadIndicators`。相對路徑轉成 `::/warehouses/`。

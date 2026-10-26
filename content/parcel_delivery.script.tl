@@ -39,6 +39,8 @@ local BoxFile <const> = "parcel_box"
 local TwoSidedFile <const> = "parcel_box_twosided"
 local DropConFile <const> = "parcel_delivery::/parcel_delivery/parcel_drop.con"
 local PairDistance <const> = 12
+--- drop boxes whose distances to a delivery point differ by less than this (m) stand in the same place
+local SamePlaceDistance <const> = 1
 local MaxDropBoxAttempts <const> = 2
 local DropBoxBuildVersion <const> = 3
 --- the drop box stands this far (m) along the street from the stacked boxes of its stop
@@ -519,16 +521,26 @@ local function pairDeliveryPoints(s : PdState)
 			b : {Engine.Entity, Engine.Component.EdgeObject, Engine.Component.BaseEdge, boolean}) : boolean
 		return a[4] and not b[4]
 	end)
-	-- the drop boxes requested in this pass (they stand from the next one on)
+	-- the drop boxes requested in this pass (they stand from the next one on), and the places of the delivery points
 	local requested : {{number}} = {}
+	local stops : {{number}} = {}
 	for _, item in ipairs(candidates) do
 		local point, eo, edge = item[1], item[2], item[3]
 		local p = eo.transf:getTransl()
+		stops[#stops + 1] = { p.x, p.y }
+		-- The drop box of a delivery point is the nearest one within PairDistance; of drop boxes at the same place (closer
+		-- than SamePlaceDistance to each other's distance), the one built first: it is the one the town buildings count
+		-- for (mailboxFor), the others are extra ones (removed below).
 		local paired : Engine.Entity = nil
+		local pairedDistance, pairedBuilt = math.huge, 0
 		for mailbox, box in pairs(s.boxes) do
-			if box.drop and box.position ~= nil
-					and (box.position[1] - p.x) ^ 2 + (box.position[2] - p.y) ^ 2 <= pair2 then
-				paired = mailbox
+			if box.drop and box.position ~= nil then
+				local d = math.sqrt((box.position[1] - p.x) ^ 2 + (box.position[2] - p.y) ^ 2)
+				local built = box.builtAt or 0
+				if d * d <= pair2 and (d < pairedDistance - SamePlaceDistance
+						or (d < pairedDistance + SamePlaceDistance and (built < pairedBuilt or (built == pairedBuilt and mailbox < paired)))) then
+					paired, pairedDistance, pairedBuilt = mailbox, d, built
+				end
 			end
 		end
 		local pending = false
@@ -548,7 +560,20 @@ local function pairDeliveryPoints(s : PdState)
 			if place ~= nil then
 				buildDropBox(place)
 				requested[#requested + 1] = { p.x, p.y }
-				info(string.format("[parcel_delivery] delivery point %d: drop box requested at %.0f, %.0f", point, place[1], place[2]))
+				if pd_debug.Enabled then
+					-- the nearest drop box: a drop box farther than PairDistance from its stop gets a second one
+					local nearest, nearestDistance = -1, math.huge
+					for mailbox, box in pairs(s.boxes) do
+						if box.drop and box.position ~= nil then
+							local d = math.sqrt((box.position[1] - p.x) ^ 2 + (box.position[2] - p.y) ^ 2)
+							if d < nearestDistance then
+								nearest, nearestDistance = mailbox, d
+							end
+						end
+					end
+					info(string.format("[parcel_delivery] delivery point %d (%s, attempt %d) at %.0f, %.0f: drop box requested at %.0f, %.0f; nearest drop box %d at %.1f m",
+						point, tostring(eo.edgeObjectConstruction), s.pointAttempts[point], p.x, p.y, place[1], place[2], nearest, nearestDistance))
+				end
 			end
 		end
 	end
@@ -574,6 +599,28 @@ local function pairDeliveryPoints(s : PdState)
 			s.pointAttempts[point] = nil
 		end
 	end
+	-- Extra drop boxes: within PairDistance of a delivery point, but the drop box of none. The game may run the update in
+	-- two Lua states at once, both building a drop box for the same delivery point in the same place; the one built
+	-- first is paired, the others are removed.
+	local pairedBoxes : {Engine.Entity : boolean} = {}
+	for _, mailbox in pairs(s.pointBoxes) do
+		pairedBoxes[mailbox] = true
+	end
+	local extra = 0
+	for mailbox, box in pairs(s.boxes) do
+		if box.drop and box.position ~= nil and not pairedBoxes[mailbox] then
+			for _, stop in ipairs(stops) do
+				if (box.position[1] - stop[1]) ^ 2 + (box.position[2] - stop[2]) ^ 2 <= pair2 then
+					removeConstruction(mailbox)
+					s.boxes[mailbox] = nil
+					extra = extra + 1
+					info(string.format("[parcel_delivery] extra drop box %d at %.0f, %.0f removed", mailbox, box.position[1], box.position[2]))
+					break
+				end
+			end
+		end
+	end
+	perfCount("extraDropBoxesRemoved", extra)
 end
 
 --- The mailbox a town building at p counts for: of the mailboxes whose range covers it, the one built first (a mailbox
