@@ -123,6 +123,14 @@
 </ul>
 
 <h3>Patch notes</h3>
+<p><b>2026-10-27</b></p>
+<ul>
+<li>Performance: the script of the mod takes about a tenth of the time it took before. The diagnostics are left out of the released version, the town buildings are looked at a few towns at a time (every town every 30 s of game time), and the regular tasks no longer fall on the same moment. The short pause about once a minute is gone, and so is the one when a drop box is built.</li>
+<li>Fixed: a delivery point could have two drop boxes in the same place. The extra ones are removed by themselves when the savegame is loaded; they produced nothing but cost maintenance.</li>
+<li>Fixed: drop boxes could stop producing, with a production bar that no longer moved. They start again by themselves: a stopped drop box is built anew, and the parcels stored in it are lost.</li>
+<li>A drop box with no residents and no businesses in its range now produces almost nothing instead of 100 parcels per year.</li>
+<li>Fixed: an error of the script, e.g. when a town removed a building, could stop the production of all drop boxes.</li>
+</ul>
 <p><b>2026-10-24</b></p>
 <ul>
 <li>Added the intercity parcel sorting centers (export and import) in Road buildings → Cargo. The export center turns the parcels of a town into the new cargo <b>parcels (long distance)</b>, the import center turns them back into parcels, so the parcels of different towns no longer mix in warehouses and on trains between towns.</li>
@@ -261,6 +269,14 @@
 </ul>
 
 <h3>更新紀錄</h3>
+<p><b>2026-10-27</b></p>
+<ul>
+<li>效能：模組腳本的運算時間約剩原本的十分之一。發布版不再執行診斷；城鎮建築改成每次只處理幾座城鎮，每座城鎮每 30 秒（遊戲時間）輪到一次；定期工作也錯開，不再擠在同一時間。原本約每分鐘一次的短暫停頓已經消失，蓋投遞箱時的停頓也一樣。</li>
+<li>修正：一個包裹投遞處可能有兩個疊在同一位置的郵箱。讀檔後會自動拆掉多出的那個；它們不產生包裹，卻要付維護費。</li>
+<li>修正：郵箱可能停止生產，生產卡片的進度條不再前進。現在會自動恢復：停產的郵箱會被拆除重蓋，裡面存放的包裹會消失。</li>
+<li>範圍內沒有居民也沒有商家的郵箱，產量從每年 100 個改為接近 0。</li>
+<li>修正：腳本出錯時（例如城鎮拆掉一棟建築），可能讓所有郵箱停止生產。</li>
+</ul>
 <p><b>2026-10-24</b></p>
 <ul>
 <li>「道路建築 → 貨運」選單新增跨城包裹分揀中心（出口、進口）。出口分揀中心把城鎮的包裹轉換成新貨物<b>包裹（長距離運輸）</b>，進口分揀中心再換回一般包裹。各城鎮的包裹在倉庫和城際火車上不會再混在一起。</li>
