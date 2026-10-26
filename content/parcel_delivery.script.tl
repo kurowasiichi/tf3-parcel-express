@@ -42,8 +42,10 @@ local DropRangeTestFile <const> = "parcel_drop_range_test.con"
 --- the farthest distance (m) of a drop box from a street (farther ones are removed), and the samples per street edge
 local MaxStreetDistance <const> = 12
 local StreetSamples <const> = 20
---- the radius (m) of the search for the street edges near a drop box (streetDistance)
+--- the radius (m) of the search for the street edges near a drop box (streetDistance), and for the edge a delivery
+--- point stands on (edgeOfObject)
 local NearStreetSearchRadius <const> = 50
+local EdgeOfObjectRadius <const> = 10
 --- The drop boxes of the parcel delivery points (parcel_box.con, the stops): the file of the drop box, the distance (m)
 --- within which a drop box belongs to a delivery point, the tries to build one, and its place on the sidewalk (inside
 --- the outer edge of the street by DropBoxInset, at least MinDropBoxOffset from the center).
@@ -115,6 +117,8 @@ local perfLuaState = string.match(tostring({}), "(%x+)$") or "?"
 --- game time (ms) of the last pass this Lua state saw, -1 before the first (runUpdate); kept per Lua state, only to
 --- skip reading the state between passes
 local lastPassSeen = -1
+--- whether this Lua state has looked at all constructions for retired ones (updatePosts)
+local retiredChecked = false
 
 local record Perf
 	--- game time (ms) and os.clock at the start of the period, -1 before the first update
@@ -336,9 +340,14 @@ local function updatePosts(s : PdState, parcel : CargoTypeId) : string
 		box.drop = isDrop
 		box.builtAt = construction.timeBuilt or 0
 	end
-	local system = api.engine.system.streetConnectorSystem
-	local forEach = (system as table).forEach as function(function(Engine.Entity))
-	forEach(visit)
+	-- All constructions are looked at once in every Lua state, for the retired constructions of an old savegame (they are
+	-- not in the build menu, so no new ones come); the post offices and the drop boxes are found below.
+	if not retiredChecked then
+		retiredChecked = true
+		local system = api.engine.system.streetConnectorSystem
+		local forEach = (system as table).forEach as function(function(Engine.Entity))
+		forEach(visit)
+	end
 	-- the post offices are street stations
 	for _, constructionEntity in pairs(api.engine.system.streetConnectorSystem.getStation2ConstructionMap()) do
 		visit(constructionEntity)
@@ -513,16 +522,12 @@ end
 --- Every parcel delivery point (a street stop, it cannot hold a stock) gets a drop box next to it, built by the script;
 --- the drop box of a delivery point that was removed is removed as well. A drop box within PairDistance of a delivery
 --- point is its drop box (also one placed by hand).
-local function pairDeliveryPoints(s : PdState)
-	s.pointBoxes = s.pointBoxes or {}
-	-- the tries start again when the way of building changes
-	if s.pointAttempts == nil or s.pointAttemptsVersion ~= DropBoxBuildVersion then
-		s.pointAttempts = {}
-		s.pointAttemptsVersion = DropBoxBuildVersion
-	end
-	-- The edge objects of the streets: getEdgeObject2EdgeMap gives none in the game script, the objects of the street
-	-- edges do.
-	local edgeObjects : {{Engine.Entity, Engine.Component.EdgeObject, Engine.Component.BaseEdge}} = {}
+local type EdgeObjectOnEdge = {Engine.Entity, Engine.Component.EdgeObject, Engine.Component.BaseEdge}
+
+--- The edge objects of all streets with their edge: all street edges of the map are looked at (getEdgeObject2EdgeMap
+--- gives none in the game script, the objects of the street edges do).
+local function streetEdgeObjects() : {EdgeObjectOnEdge}
+	local edgeObjects : {EdgeObjectOnEdge} = {}
 	local edgesDone : {Engine.Entity : boolean} = {}
 	local edgeCount = 0
 	for _, edges in pairs(api.engine.system.streetSystem.getNode2StreetEdgeMap() or {}) do
@@ -540,6 +545,70 @@ local function pairDeliveryPoints(s : PdState)
 			end
 		end
 	end
+	perfCount("streetEdges", edgeCount)
+	return edgeObjects
+end
+
+--- The street edge an edge object stands on: of the street edges near it (spatial index of the game), the one listing
+--- it among its objects; nil if none does.
+local function edgeOfObject(object : Engine.Entity, eo : Engine.Component.EdgeObject) : Engine.Component.BaseEdge
+	local p = eo.transf:getTransl()
+	local near = api.engine.util.octree.findEntitiesInCircle(api.type.Vec2f.new(p.x, p.y), EdgeOfObjectRadius,
+		api.type.ComponentType.BASE_EDGE_STREET) or {}
+	for _, edge in ipairs(near) do
+		local e = api.engine.getComponent(edge, api.type.ComponentType.BASE_EDGE) as Engine.Component.BaseEdge
+		for _, listed in ipairs(e ~= nil and e.objects or {}) do
+			if listed[1] == object then
+				return e
+			end
+		end
+	end
+	return nil
+end
+
+--- The parcel delivery points with their street edge, from the edge objects of the map (far fewer than the street
+--- edges) and the spatial index of the game. nil if this does not work (no edge objects at all, a delivery point
+--- whose edge is not found, or an error): then the streets are looked at (streetEdgeObjects).
+local function parcelEdgeObjects() : {EdgeObjectOnEdge}
+	local ok, result = pcall(function() : {EdgeObjectOnEdge}
+		local objects = 0
+		local stops : {{Engine.Entity, Engine.Component.EdgeObject}} = {}
+		api.engine.forEachEntityWithComponent(function(entity : Engine.Entity)
+			objects = objects + 1
+			local eo = api.engine.getComponent(entity, api.type.ComponentType.EDGE_OBJECT) as Engine.Component.EdgeObject
+			if eo ~= nil and string.find(tostring(eo.edgeObjectConstruction), BoxFile, 1, true) ~= nil then
+				stops[#stops + 1] = { entity, eo }
+			end
+		end, api.type.ComponentType.EDGE_OBJECT)
+		perfCount("edgeObjectsListed", objects)
+		if objects == 0 then
+			return nil
+		end
+		local edgeObjects : {EdgeObjectOnEdge} = {}
+		for _, stop in ipairs(stops) do
+			local e = edgeOfObject(stop[1], stop[2])
+			if e == nil then
+				return nil
+			end
+			edgeObjects[#edgeObjects + 1] = { stop[1], stop[2], e }
+		end
+		return edgeObjects
+	end)
+	return ok and result as {EdgeObjectOnEdge} or nil
+end
+
+local function pairDeliveryPoints(s : PdState)
+	s.pointBoxes = s.pointBoxes or {}
+	-- the tries start again when the way of building changes
+	if s.pointAttempts == nil or s.pointAttemptsVersion ~= DropBoxBuildVersion then
+		s.pointAttempts = {}
+		s.pointAttemptsVersion = DropBoxBuildVersion
+	end
+	local edgeObjects = parcelEdgeObjects()
+	perfCount("deliveryPointsViaStreets", edgeObjects == nil and 1 or 0)
+	if edgeObjects == nil then
+		edgeObjects = streetEdgeObjects()
+	end
 	if pd_debug.Enabled and s.passes % LogEveryPasses == 1 then
 		local samples : {string} = {}
 		for i = 1, math.min(#edgeObjects, 8) do
@@ -547,7 +616,6 @@ local function pairDeliveryPoints(s : PdState)
 		end
 		info(string.format("[parcel_delivery] edge objects: %d; %s", #edgeObjects, table.concat(samples, "; ")))
 	end
-	perfCount("streetEdges", edgeCount)
 	perfCount("edgeObjects", #edgeObjects)
 	local points : {Engine.Entity : boolean} = {}
 	local pair2 = PairDistance * PairDistance
