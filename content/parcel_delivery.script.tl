@@ -17,10 +17,17 @@ local StateVersion <const> = 2
 local ParcelCargo <const> = production.ParcelCargo
 --- the rate of the business parcels is averaged over this many days (for the log)
 local BusinessAverageDays <const> = 30
---- the productivity of a stock list is only set again when it changes by more than this fraction, and it is never less
---- than the minimum (one parcel in ten years; at 0 the rule produces as fast as it can)
+--- The productivity of a stock list is only set again when it changes by more than this fraction, and it is never less
+--- than that of MinParcelsPerYear (a drop box without residents and businesses). The rule takes year / capacity /
+--- productivity for a parcel, and the game fixes this time when the parcel before is made: a parcel made at a very low
+--- productivity puts the next one far ahead, whatever the productivity is set to afterwards (the former minimum of
+--- 0.001 put it 10 years ahead and the drop box stopped). At the minimum the next parcel is at most a month ahead. At 0
+--- the rule would produce as fast as it can.
 local ProductivityTolerance <const> = 0.05
-local MinProductivity <const> = 0.001
+local MinParcelsPerYear <const> = 12
+--- a rule whose next parcel is further ahead than this many times the longest time of the minimum is stuck (a parcel
+--- made at the former minimum): its drop box is built again (the rule starts anew)
+local StuckFactor <const> = 3
 --- parts of the resource names of the parcel posts and of the hidden sources of the previous prototype
 local PostFile <const> = "parcel_post.con"
 local OldSourceFile <const> = "parcel_source.con"
@@ -301,6 +308,8 @@ local function updatePosts(s : PdState, parcel : CargoTypeId) : string
 		if box == nil then
 			box = { source = constructionEntity, stockList = stockList, residents = 0, pending = 0, produced = 0, requested = -1 }
 			s.boxes[constructionEntity] = box
+			-- the buildings around it are counted on the next pass (all towns), not on the turns of their towns
+			s.townShares = {}
 			local sl = stockList >= 0 and api.engine.getComponent(stockList, api.type.ComponentType.STOCK_LIST) as Engine.Component.StockList or nil
 			info(string.format("[parcel_delivery] parcel post %d at %.0f, %.0f: parcel stock %d with %d parcels, productivity %.2f, built %d ms ago",
 				constructionEntity, p.x, p.y, stockList,
@@ -328,6 +337,8 @@ local function updatePosts(s : PdState, parcel : CargoTypeId) : string
 	for key in pairs(s.boxes) do
 		if not found[key] then
 			s.boxes[key] = nil
+			-- its buildings go to the other mailboxes on the next pass (all towns)
+			s.townShares = {}
 		end
 	end
 	return "parcel posts"
@@ -621,6 +632,10 @@ local function pairDeliveryPoints(s : PdState)
 		end
 	end
 	perfCount("extraDropBoxesRemoved", extra)
+	if extra > 0 then
+		-- the buildings counted for them go to the drop boxes kept on the next pass (all towns)
+		s.townShares = {}
+	end
 end
 
 --- The mailbox a town building at p counts for: of the mailboxes whose range covers it, the one built first (a mailbox
@@ -930,7 +945,27 @@ local function businessParcels() : boolean
 	return (param(BusinessParam) or 2) == 2
 end
 
-local function produce(s : PdState, days : number, now : integer, parcel : CargoTypeId)
+--- whether the rule of a stock list waits for a parcel further ahead than the minimum allows (see StuckFactor)
+local function isStuck(stockList : Engine.Component.StockList, now : integer) : boolean
+	local maxInterval = api.util.getDefaultYearDuration() / MinParcelsPerYear * StuckFactor
+	for _, ruleData in ipairs(stockList.ruleDatas or {}) do
+		local last : Engine.Component.StockList.RuleData.ApplyInfo = nil
+		for _, apply in ipairs(ruleData.applyHistory or {}) do
+			if last == nil or apply.time > last.time then
+				last = apply
+			end
+		end
+		if last ~= nil and last.interval > maxInterval and now < last.time + last.interval then
+			return true
+		end
+	end
+	return false
+end
+
+--- Sets the productivity of every mailbox from its residents and businesses. Returns the drop boxes whose rule is stuck
+--- (isStuck): they are built again.
+local function produce(s : PdState, days : number, now : integer, parcel : CargoTypeId) : {Engine.Entity}
+	local stuck : {Engine.Entity} = {}
 	local perResidentPerDay = ParcelsPerResidentPerDay * rate(RateParam)
 	local perSuppliedUnit = ParcelsPerSuppliedUnit * rate(BusinessRateParam)
 	-- the consumption of the businesses and the production since the last pass (the history before the first pass is
@@ -957,13 +992,15 @@ local function produce(s : PdState, days : number, now : integer, parcel : Cargo
 			box.room = reachableRoom(s, box, parcel)
 		end
 		-- The rule of the stock produces like an industry, production.RuleCapacity parcels per year at productivity 1, so
-		-- the productivity is the share of that. The rule takes year / capacity / productivity for a parcel: productivity
-		-- 0 would make that 0, and the rule would produce as fast as it can, hence the minimum.
+		-- the productivity is the share of that (at least that of MinParcelsPerYear).
 		-- the stock list of a box removed since the last scan no longer exists (getComponent throws then)
 		local stockList = box.stockList >= 0 and api.engine.entityExists(box.stockList)
 			and api.engine.getComponent(box.stockList, api.type.ComponentType.STOCK_LIST) as Engine.Component.StockList or nil
+		if stockList ~= nil and box.drop and isStuck(stockList, now) then
+			stuck[#stuck + 1] = box.source
+		end
 		if stockList ~= nil then
-			local productivity = math.max(MinProductivity, box.perYear / production.RuleCapacity)
+			local productivity = math.max(MinParcelsPerYear, box.perYear) / production.RuleCapacity
 			-- compared with the productivity the stock list has: a rebuilt stock starts again at 1
 			local last = stockList.modifiers ~= nil and stockList.modifiers.productivity or -1
 			if last <= 0 or math.abs(productivity - last) > ProductivityTolerance * math.max(last, productivity) then
@@ -976,6 +1013,27 @@ local function produce(s : PdState, days : number, now : integer, parcel : Cargo
 				box.produced = (box.produced or 0) + producedBetween(box.stockList, from, now)
 			end
 		end
+	end
+	return stuck
+end
+
+--- Removes drop boxes (stuck ones): their delivery points get a new one on the next look at the delivery points
+--- (pairDeliveryPoints), with tries anew; the parcels in their stock are lost.
+local function rebuildDropBoxes(s : PdState, mailboxes : {Engine.Entity})
+	for _, mailbox in ipairs(mailboxes) do
+		removeConstruction(mailbox)
+		s.boxes[mailbox] = nil
+		for point, paired in pairs(s.pointBoxes or {}) do
+			if paired == mailbox then
+				s.pointBoxes[point] = nil
+				s.pointAttempts[point] = nil
+			end
+		end
+		info(string.format("[parcel_delivery] drop box %d: its rule waits for a parcel far ahead, built again", mailbox))
+	end
+	if #mailboxes > 0 then
+		-- the town buildings counted for them are counted again on the next pass
+		s.townShares = {}
 	end
 end
 
@@ -1221,17 +1279,21 @@ local function logSummary(s : PdState, parcel : CargoTypeId, how : string)
 	for mailbox, box in pairs(s.boxes) do
 		local sl = box.stockList >= 0 and api.engine.getComponent(box.stockList, api.type.ComponentType.STOCK_LIST) as Engine.Component.StockList or nil
 		-- the productivity the stock list has, and when its rule last made a parcel (whether it produces at all)
-		local lastApply, applies = -1, 0
+		local lastApply, lastInterval, applies, decay = -1, -1, 0, -1.0
 		for _, ruleData in ipairs(sl ~= nil and sl.ruleDatas or {}) do
+			decay = ruleData.lastApplyDecayFactor or -1
 			for _, apply in ipairs(ruleData.applyHistory or {}) do
 				applies = applies + 1
-				lastApply = math.max(lastApply, apply.time)
+				if apply.time > lastApply then
+					lastApply, lastInterval = apply.time, apply.interval
+				end
 			end
 		end
-		reach[#reach + 1] = string.format("%d: %d residents, %d lines (%d with changes), %d residents in %d homes reachable with room for %.1f parcels, %.0f parcels per year, productivity %.3f (set %.3f), %d applies in the history, the last %s, %d stocks and %d rules, %d produced, %d in stock, %.1f pending",
+		reach[#reach + 1] = string.format("%d: %d residents, %d lines (%d with changes), %d residents in %d homes reachable with room for %.1f parcels, %.0f parcels per year, productivity %.3f (set %.3f), %d applies in the history, the last %s with interval %s, decay factor %.3f, %d stocks and %d rules, %d produced, %d in stock, %.1f pending",
 			mailbox, box.residents or 0, box.lines or 0, box.transferLines or 0, box.reachable or 0, #(box.reachableHomes or {}), box.room or -1,
 			box.perYear or 0, sl ~= nil and sl.modifiers ~= nil and sl.modifiers.productivity or -1, box.productivity or -1, applies,
 			lastApply >= 0 and string.format("%.0f s ago", (now - lastApply) / 1000) or "never",
+			lastInterval >= 0 and string.format("%.1f s", lastInterval / 1000) or "-", decay,
 			sl ~= nil and #(sl.stocks or {}) or -1, sl ~= nil and #(sl.rules or {}) or -1,
 			box.produced or 0, box.stockList >= 0 and (api.engine.system.simEntityAtStockSystem.getStockCount(box.stockList, 0) or 0) or -1,
 			box.pending or 0)
@@ -1409,12 +1471,15 @@ local function runUpdate(state : GameScriptState<PdState>) : integer
 	end
 	-- the parts below may fail like the others without keeping the state from being saved
 	local okProduce, errProduce : boolean, any
+	local stuck : {Engine.Entity} = {}
 	timed("production", function()
 		okProduce, errProduce = pcall(function() : boolean
-			produce(s, dt / millisPerDay(), now, parcel)
+			stuck = produce(s, dt / millisPerDay(), now, parcel)
+			rebuildDropBoxes(s, stuck)
 			return true
 		end)
 	end)
+	perfCount("stuckDropBoxesRebuilt", #stuck)
 	if not okProduce then
 		log.message("[parcel_delivery] production failed: " .. tostring(errProduce))
 	end
