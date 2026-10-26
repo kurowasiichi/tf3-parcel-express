@@ -70,8 +70,11 @@ local record ScanTurns
 	deliveryPoints : integer
 	sortingBoost : integer
 	reachable : integer
+	--- the check for stuck rules of the drop boxes (in the production pass)
+	stuckRules : integer
 end
-local ScanTurn <const> : ScanTurns = { townNeeds = 0, mailboxes = 1, deliveryPoints = 2, sortingBoost = 3, reachable = 4 }
+local ScanTurn <const> : ScanTurns = { townNeeds = 0, mailboxes = 1, deliveryPoints = 2, sortingBoost = 3, reachable = 4,
+	stuckRules = 3 }
 --- a summary is logged every n-th pass
 local LogEveryPasses <const> = 30
 --- town buildings within this distance (m) of a parcel post count for it: the options of the mod parameter (mod.json),
@@ -104,6 +107,10 @@ local FallbackMillisPerDay <const> = 2000
 local clock : function() : number = os ~= nil and os.clock or nil
 local PerfLogMs <const> = 60000
 local perfLuaState = string.match(tostring({}), "(%x+)$") or "?"
+
+--- game time (ms) of the last pass this Lua state saw, -1 before the first (runUpdate); kept per Lua state, only to
+--- skip reading the state between passes
+local lastPassSeen = -1
 
 local record Perf
 	--- game time (ms) and os.clock at the start of the period, -1 before the first update
@@ -969,9 +976,10 @@ local function isStuck(stockList : Engine.Component.StockList, productivity : nu
 	return false
 end
 
---- Sets the productivity of every mailbox from its residents and businesses. Returns the drop boxes whose rule is stuck
---- (isStuck): they are built again.
-local function produce(s : PdState, days : number, now : integer, parcel : CargoTypeId) : {Engine.Entity}
+--- Sets the productivity of every mailbox from its residents and businesses. With checkStuck (every ScanEveryPasses
+--- passes: a stuck rule shows only after minutes) returns the drop boxes whose rule is stuck (isStuck): they are built
+--- again.
+local function produce(s : PdState, days : number, now : integer, parcel : CargoTypeId, checkStuck : boolean) : {Engine.Entity}
 	local stuck : {Engine.Entity} = {}
 	local perResidentPerDay = ParcelsPerResidentPerDay * rate(RateParam)
 	local perSuppliedUnit = ParcelsPerSuppliedUnit * rate(BusinessRateParam)
@@ -1004,7 +1012,7 @@ local function produce(s : PdState, days : number, now : integer, parcel : Cargo
 		local stockList = box.stockList >= 0 and api.engine.entityExists(box.stockList)
 			and api.engine.getComponent(box.stockList, api.type.ComponentType.STOCK_LIST) as Engine.Component.StockList or nil
 		local productivity = box.perYear > 0 and box.perYear / production.RuleCapacity or DefaultProductivity
-		if stockList ~= nil and box.drop and isStuck(stockList, productivity, now) then
+		if checkStuck and stockList ~= nil and box.drop and isStuck(stockList, productivity, now) then
 			stuck[#stuck + 1] = box.source
 		end
 		if stockList ~= nil then
@@ -1347,6 +1355,12 @@ end
 
 --- One update call (every frame); returns the game time, -1 if it was not read. The parts are timed for the perf line.
 local function runUpdate(state : GameScriptState<PdState>) : integer
+	-- Between two passes the update returns before reading the state (read as a whole): most calls come between
+	-- passes. A game time before the last pass seen (a savegame loaded) reads it again.
+	local now = gameTimeMs()
+	if lastPassSeen >= 0 and now >= lastPassSeen and now - lastPassSeen < PassIntervalMs then
+		return now
+	end
 	local s : PdState
 	timed("stateGet", function()
 		s = state:get()
@@ -1355,16 +1369,19 @@ local function runUpdate(state : GameScriptState<PdState>) : integer
 		s = newState()
 		info("[parcel_delivery] state initialized")
 	end
-	local now = gameTimeMs()
 	if s.lastTime < 0 or now < s.lastTime then
 		s.lastTime = now
+		lastPassSeen = now
 		state:set(s)
 		return now
 	end
+	-- the last pass may have run in another Lua state
+	lastPassSeen = s.lastTime
 	local dt = now - s.lastTime
 	if dt < PassIntervalMs then
 		return now
 	end
+	lastPassSeen = now
 	s.lastTime = now
 	s.passes = (s.passes or 0) + 1
 
@@ -1401,11 +1418,15 @@ local function runUpdate(state : GameScriptState<PdState>) : integer
 		else
 			log.message("[parcel_delivery] parcel post update failed: " .. tostring(result))
 		end
+		-- the street near a new drop box (all streets of the map are looked at, once for every new drop box)
 		for mailbox, box in pairs(s.boxes) do
 			if box.drop and not box.stopDone then
-				local okCheck, errCheck = pcall(function() : boolean
-					checkDropBox(mailbox, box)
-					return true
+				local okCheck, errCheck : boolean, any
+				timed("dropBoxStreet", function()
+					okCheck, errCheck = pcall(function() : boolean
+						checkDropBox(mailbox, box)
+						return true
+					end)
 				end)
 				if not okCheck then
 					box.stopDone = true
@@ -1481,7 +1502,7 @@ local function runUpdate(state : GameScriptState<PdState>) : integer
 	local stuck : {Engine.Entity} = {}
 	timed("production", function()
 		okProduce, errProduce = pcall(function() : boolean
-			stuck = produce(s, dt / millisPerDay(), now, parcel)
+			stuck = produce(s, dt / millisPerDay(), now, parcel, turn == ScanTurn.stuckRules)
 			rebuildDropBoxes(s, stuck)
 			return true
 		end)
