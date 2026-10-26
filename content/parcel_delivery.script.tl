@@ -832,7 +832,9 @@ local function updateReachable(s : PdState, homes : {Engine.Entity : integer})
 
 	for mailbox, box in pairs(s.boxes) do
 		local sources : {Engine.Entity : boolean} = {}
-		local construction = api.engine.getComponent(mailbox, api.type.ComponentType.CONSTRUCTION) as Engine.Component.Construction
+		-- a mailbox removed in this pass (getComponent throws for an entity that no longer exists)
+		local construction = api.engine.entityExists(mailbox)
+			and api.engine.getComponent(mailbox, api.type.ComponentType.CONSTRUCTION) as Engine.Component.Construction or nil
 		-- a post office sends from its own station only: the catchment of a nearby post office may cover its stock, but
 		-- the parcels are counted for the post office whose lines serve them. A parcel post has no station, the stations
 		-- covering its stock send its parcels.
