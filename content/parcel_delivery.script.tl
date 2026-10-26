@@ -40,6 +40,8 @@ local DropRangeTestFile <const> = "parcel_drop_range_test.con"
 --- the farthest distance (m) of a drop box from a street (farther ones are removed), and the samples per street edge
 local MaxStreetDistance <const> = 12
 local StreetSamples <const> = 20
+--- the radius (m) of the search for the street edges near a drop box (streetDistance)
+local NearStreetSearchRadius <const> = 50
 --- The drop boxes of the parcel delivery points (parcel_box.con, the stops): the file of the drop box, the distance (m)
 --- within which a drop box belongs to a delivery point, the tries to build one, and its place on the sidewalk (inside
 --- the outer edge of the street by DropBoxInset, at least MinDropBoxOffset from the center).
@@ -380,27 +382,56 @@ local function edgePoint(e : Engine.Component.BaseEdge, t : number) : number, nu
 	return x, y, dx, dy
 end
 
---- the distance (m) from (x, y) to the nearest street, nil without streets
-local function streetDistance(x : number, y : number) : number
+--- the searches of all streets in this Lua state (streetDistance; for the perf line)
+local fullStreetSearches = 0
+
+--- the distance (m) from (x, y) to the nearest of the street edges, math.huge without any
+local function edgesDistance(x : number, y : number, edges : {Engine.Entity}) : number
 	local nearest : number = math.huge
+	for _, edge in ipairs(edges) do
+		local e = api.engine.getComponent(edge, api.type.ComponentType.BASE_EDGE) as Engine.Component.BaseEdge
+		if e ~= nil then
+			for i = 0, StreetSamples do
+				local px, py = edgePoint(e, i / StreetSamples)
+				local d = math.sqrt((px - x) ^ 2 + (py - y) ^ 2)
+				if d < nearest then
+					nearest = d
+				end
+			end
+		end
+	end
+	return nearest
+end
+
+--- The distance (m) from (x, y) to the nearest street, nil without streets. The street edges near it come from the
+--- spatial index of the game (octree, within NearStreetSearchRadius); only when none of them is within maxDistance are
+--- all streets of the map looked at (the octree may leave out a long edge whose middle is far): a street within
+--- maxDistance is found either way, a farther distance is that of the full search.
+local function streetDistance(x : number, y : number, maxDistance : number) : number
+	local okNear, near = pcall(function() : {Engine.Entity}
+		return api.engine.util.octree.findEntitiesInCircle(api.type.Vec2f.new(x, y), NearStreetSearchRadius,
+			api.type.ComponentType.BASE_EDGE_STREET)
+	end)
+	if okNear and near ~= nil then
+		local nearest = edgesDistance(x, y, near as {Engine.Entity})
+		perfCount("streetEdgesNear", #(near as {Engine.Entity}))
+		if nearest <= maxDistance then
+			return nearest
+		end
+	end
+	fullStreetSearches = fullStreetSearches + 1
+	perfCount("streetFullSearches", fullStreetSearches)
+	local all : {Engine.Entity} = {}
 	local edgesDone : {Engine.Entity : boolean} = {}
 	for _, edges in pairs(api.engine.system.streetSystem.getNode2StreetEdgeMap() or {}) do
 		for _, edge in ipairs(edges) do
 			if not edgesDone[edge] then
 				edgesDone[edge] = true
-				local e = api.engine.getComponent(edge, api.type.ComponentType.BASE_EDGE) as Engine.Component.BaseEdge
-				if e ~= nil then
-					for i = 0, StreetSamples do
-						local px, py = edgePoint(e, i / StreetSamples)
-						local d = math.sqrt((px - x) ^ 2 + (py - y) ^ 2)
-						if d < nearest then
-							nearest = d
-						end
-					end
-				end
+				all[#all + 1] = edge
 			end
 		end
 	end
+	local nearest = edgesDistance(x, y, all)
 	return nearest < math.huge and nearest or nil
 end
 
@@ -410,7 +441,7 @@ local function checkDropBox(mailbox : Engine.Entity, box : PdBox)
 		return
 	end
 	box.stopDone = true
-	local distance = streetDistance(box.position[1], box.position[2])
+	local distance = streetDistance(box.position[1], box.position[2], MaxStreetDistance)
 	if distance == nil or distance > MaxStreetDistance then
 		removeConstruction(mailbox)
 		info(string.format("[parcel_delivery] drop box %d removed: no street within %d m", mailbox, MaxStreetDistance))
