@@ -899,6 +899,10 @@ end
 --- cargo units consumed by a stock list in the game time (from, to]: every application of a rule records the stocks
 --- it took one unit from
 local function consumedBetween(stockListEntity : Engine.Entity, from : integer, to : integer) : integer
+	-- a building removed since its town was scanned (getComponent throws for an entity that no longer exists)
+	if not api.engine.entityExists(stockListEntity) then
+		return 0
+	end
 	local stockList = api.engine.getComponent(stockListEntity, api.type.ComponentType.STOCK_LIST) as Engine.Component.StockList
 	if stockList == nil or stockList.ruleDatas == nil then
 		return 0

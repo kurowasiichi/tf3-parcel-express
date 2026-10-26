@@ -27,8 +27,15 @@ if ($Compare) {
         $byName = @{}
         foreach ($row in $rows) { $byName[$row.Metric] = [double]$row.Value }
         if (-not $byName.ContainsKey("update ms per min w/o longest") -and $byName.ContainsKey("update max ms")) {
+            $byName["update ms per min w/o longest"] = $byName["update ms per min"] - $byName["update max ms"] / $byName["real minutes"]
             $rows = @([pscustomobject]@{ Metric = "update ms per min w/o longest"
-                Value = [math]::Round($byName["update ms per min"] - $byName["update max ms"] / $byName["real minutes"], 3) }) + $rows
+                Value = [math]::Round($byName["update ms per min w/o longest"], 3) }) + $rows
+        }
+        # per pass of the script (2 s of game time): the game speed of the tests may differ, the passes per real minute
+        # with it; the production part runs once on every pass
+        if ($byName.ContainsKey("production runs per min") -and $byName["production runs per min"] -gt 0) {
+            $rows = @([pscustomobject]@{ Metric = "update ms per pass w/o longest"
+                Value = [math]::Round($byName["update ms per min w/o longest"] / $byName["production runs per min"], 3) }) + $rows
         }
         foreach ($row in $rows) {
             if (-not $table.Contains($row.Metric)) { $table[$row.Metric] = [ordered]@{ Metric = $row.Metric } }
