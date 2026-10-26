@@ -17,14 +17,16 @@ local StateVersion <const> = 2
 local ParcelCargo <const> = production.ParcelCargo
 --- the rate of the business parcels is averaged over this many days (for the log)
 local BusinessAverageDays <const> = 30
---- The productivity of a stock list is only set again when it changes by more than this fraction. A mailbox without
---- parcels (no residents and businesses counted, e.g. before its towns are scanned) keeps productivity 1, the 100 parcels
---- per year a stock starts with; with parcels it gets their productivity. The rule takes year / capacity / productivity
---- for a parcel, and the game fixes this time when the parcel before is made: a parcel made at a very low productivity
---- puts the next one far ahead, whatever the productivity is set to afterwards (the former minimum of 0.001 put it 10
---- years ahead and the drop box stopped). At 0 the rule would produce as fast as it can.
+--- The productivity of a stock list is only set again when it changes by more than this fraction. A mailbox not counted
+--- yet (its towns not all scanned since it was added) keeps productivity 1, the 100 parcels per year a stock starts
+--- with; a counted one gets the productivity of its parcels, ZeroProductivity without any (one parcel in ten years; at 0
+--- the rule would produce as fast as it can). The rule takes year / capacity / productivity for a parcel, and the game
+--- fixes this time when the parcel before is made: a parcel made at a very low productivity puts the next one far
+--- ahead, whatever the productivity is set to afterwards. A drop box that gets parcels later is stuck then and built
+--- again (isStuck).
 local ProductivityTolerance <const> = 0.05
 local DefaultProductivity <const> = 1
+local ZeroProductivity <const> = 0.001
 --- A rule is stuck when its next parcel is further ahead than this many times the time of a parcel at the productivity
 --- of now, and more than StuckMinYearShare of a year ahead (a parcel made at a far lower productivity): its drop box is
 --- built again (the rule starts anew).
@@ -317,7 +319,8 @@ local function updatePosts(s : PdState, parcel : CargoTypeId) : string
 		local box = s.boxes[constructionEntity]
 		local p = construction.transf:getTransl()
 		if box == nil then
-			box = { source = constructionEntity, stockList = stockList, residents = 0, pending = 0, produced = 0, requested = -1 }
+			box = { source = constructionEntity, stockList = stockList, residents = 0, pending = 0, produced = 0, requested = -1,
+				addedPass = s.passes }
 			s.boxes[constructionEntity] = box
 			-- the buildings around it are counted on the next pass (all towns), not on the turns of their towns
 			s.townShares = {}
@@ -743,11 +746,13 @@ local function scanTowns(s : PdState) : boolean
 	table.sort(towns)
 	s.townShares = s.townShares or {}
 	local turn = s.passes % TownScanPasses
+	s.townScannedAt = s.townScannedAt or {}
 	local buildingCount, missingCount = 0, 0
 	for i, town in ipairs(towns) do
 		if (i - 1) % TownScanPasses == turn or s.townShares[town] == nil then
 			local shares, missing = scanTown(s, townMap[town], radius2)
 			s.townShares[town] = shares
+			s.townScannedAt[town] = s.passes
 			buildingCount = buildingCount + #townMap[town]
 			missingCount = missingCount + missing
 		end
@@ -756,11 +761,18 @@ local function scanTowns(s : PdState) : boolean
 	for town in pairs(s.townShares) do
 		if townMap[town] == nil then
 			s.townShares[town] = nil
+			s.townScannedAt[town] = nil
 		end
+	end
+	-- the pass of the oldest look at a town: a mailbox added before it has been counted in all towns
+	local oldestScan = s.passes
+	for _, town in ipairs(towns) do
+		oldestScan = math.min(oldestScan, s.townScannedAt[town] or -1)
 	end
 	for _, box in pairs(s.boxes) do
 		box.residents = 0
 		box.suppliers = {}
+		box.counted = box.addedPass == nil or oldestScan >= box.addedPass
 	end
 	for _, shares in pairs(s.townShares) do
 		for key, share in pairs(shares) do
@@ -1038,11 +1050,14 @@ local function produce(s : PdState, days : number, now : integer, parcel : Cargo
 			box.room = reachableRoom(s, box, parcel)
 		end
 		-- The rule of the stock produces like an industry, production.RuleCapacity parcels per year at productivity 1, so
-		-- the productivity is the share of that (DefaultProductivity without parcels).
+		-- the productivity is the share of that (DefaultProductivity until counted, ZeroProductivity without parcels).
 		-- the stock list of a box removed since the last scan no longer exists (getComponent throws then)
 		local stockList = box.stockList >= 0 and api.engine.entityExists(box.stockList)
 			and api.engine.getComponent(box.stockList, api.type.ComponentType.STOCK_LIST) as Engine.Component.StockList or nil
-		local productivity = box.perYear > 0 and box.perYear / production.RuleCapacity or DefaultProductivity
+		local productivity : number = DefaultProductivity
+		if box.counted ~= false then
+			productivity = box.perYear > 0 and box.perYear / production.RuleCapacity or ZeroProductivity
+		end
 		if checkStuck and stockList ~= nil and box.drop and isStuck(stockList, productivity, now) then
 			stuck[#stuck + 1] = box.source
 		end

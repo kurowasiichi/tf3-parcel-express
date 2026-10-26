@@ -36,6 +36,10 @@ global record PdBox
 	stopDone : boolean
 	--- game time (ms) the construction was built: a building in the range of several mailboxes counts for the first one
 	builtAt : integer
+	--- the pass the script found the mailbox in (nil for those of earlier versions), and whether all towns have been
+	--- scanned since (scanTowns): until then it keeps the productivity a stock starts with
+	addedPass : integer
+	counted : boolean
 	--- the amount the stock was set to last, -1 or nil if never
 	lastSet : integer
 	--- game time (ms) of the last write into a stock that was not empty
@@ -75,6 +79,8 @@ global record PdState
 	pointAttemptsVersion : integer
 	--- the share of every mailbox in the buildings of every town, by town and mailbox (scanTowns)
 	townShares : {Engine.Entity : {Engine.Entity : PdTownShare}}
+	--- the pass every town was last scanned in
+	townScannedAt : {Engine.Entity : integer}
 	--- diagnostics: parcels that left a stock, by what became of them
 	leftDestroyedNoTarget : integer
 	leftDestroyedWithTarget : integer
