@@ -6,6 +6,8 @@ Transport Fever 3 模組：新增貨物「包裹」。居民與商工業把包�
 
 - 程式用 Teal（`.tl`）撰寫。型別檢查：`powershell -ExecutionPolicy Bypass -File tools\check.ps1`。執行前先把 `C:\Users\kurow\tools\tl\tl-0.24.7-windows-x86_64` 加進 PATH。
 - 部署：`powershell -ExecutionPolicy Bypass -File tools\deploy.ps1`，預設部署到 `staging_area`。型別檢查通過才部署。
+- 使用者說「希望部署發布版本」（或「部屬發布版本」）時，用 `tools\deploy.ps1 -Release`：部署出去的 `content\parcel_delivery\debug.tl` 會把 `Enabled` 改成 `false`，關閉診斷計算與一般 log，只留錯誤訊息；專案裡的檔案維持 `true`。平常測試用一般部署。
+- 除錯開關 `pd_debug.Enabled`（`parcel_delivery/debug.tl`）：新增的診斷計算或一般 log 都要包在開關裡，一般 log 用遊戲腳本的 `info()`；錯誤訊息直接用 `log.message`。
 - 同一個模組 ID 同時存在於 `staging_area` 和 `local\mods` 時，遊戲載入的是 staging 的版本。log 裡會出現 `modHubId=StagingArea,<modId>`。
 - 遊戲 log：`C:\Program Files (x86)\Steam\userdata\84279570\3493540\local\crash_dump\stdout.txt`，用 `[parcel_delivery]` 篩選。
 - 遊戲本體在 `D:\SteamLibrary\steamapps\common\Transport Fever 3`。型別定義在 `api\tealdef` 和 `base\tealdef`，原版腳本多半包在 `base\content\*.zip` 裡。
@@ -27,6 +29,12 @@ Transport Fever 3 模組：新增貨物「包裹」。居民與商工業把包�
   - 範圍內的居民和商工業建築歸給最早蓋好的投遞箱。
   - 每年產量 = 居民 × 0.5 × 倍率 ＋ 商工業消耗量 × 0.5 × 倍率。兩個倍率的選項都是 0.5／1／1.5／2，預設 1。
   - 換算成生產效率送給庫存，效率最低 0.001。
+  - 效能：update 每個 frame 都會被呼叫，兩次運算之間（2000 ms 遊戲時間）在讀取狀態前就返回。全地圖的建築掃描只在每個 Lua 狀態第一次執行時做（找舊存檔的已移除建築）。居民與商工業歸屬用網格查找附近的投遞箱。可達住宅、包裹去向、車站涵蓋等診斷只在除錯開關開啟時計算。
+  - 掃全地圖道路找包裹投遞處（`pairDeliveryPoints`）只在需要時做：每個 Lua 狀態第一次、玩家送出建設提案後（`handleEvent` 訂閱 `apply_command`／`onPostBuildProposal`，參數第 4 項為玩家發起）、剛要求建投遞箱還沒配對時、已配對的投遞處或投遞箱不存在時。尚未在遊戲中確認事件會送達。
+  - 城鎮建築掃描（居民、商工業歸屬）與商工業寄件量每 15 回合（30 秒遊戲時間）計算一次，寄件量涵蓋上次計算到現在的消耗。找包裹投遞處每回合依 `pointsChanged` 決定要不要做。生產效率每回合依現有數字調整，只在相差超過 5% 時送出指令。
+  - 除錯版每分鐘在 log 寫一行 `[parcel_delivery] timings:`，列出各部分（投遞箱、全地圖道路、城鎮建築、生產效率）的執行次數與平均、最長毫秒數，用 `os.clock` 計時（遊戲沒有就顯示 `no clock`）。
+  - 已修正：配對的投遞箱消失、重蓋次數用完後，配對表沒清掉，`pointsChanged` 每回合都成立，變成每 2 秒掃一次全地圖道路。
+  - 新投遞箱：庫存建立時效率為 1（一年 100 個）。腳本發現新投遞箱的那一回合就設成最低效率 0.001，並設 `buildingsDirty`，下一回合補做城鎮建築掃描得到正確產量。若生產紀錄 `applyHistory` 只保留最近幾筆，間隔拉長可能漏算，尚未確認。
   - 新的投遞箱若 12 m 內沒有道路就拆掉。配送點由玩家自己蓋。腳本自動加配送點的做法已放棄：建設提案檢查通過，送出後卻從沒建起來。
 - **跨城包裹分揀中心**（`parcel_sorting.script.tl`、`parcel_sorting_export.con.lua`、`parcel_sorting_import.con.lua`）
   - 模型是原版貨物倉庫：腳本自己依序呼叫倉庫 `updateFn`、貨物模組 `modules.script@goods.updateFn`（第一個插槽）和倉庫的 `terminateConstructionHook`，因為建築沒有 `modules` 參數時，遊戲不會套用模組。結果只留 `subconstructions`、`snapPoint`，拿掉 `warehouse` 元件與存放庫存，沒有插槽，玩家不能加模組。貨物模組的庫存模型分給投入與產出庫存當 `loadIndicators`。相對路徑轉成 `::/warehouses/`。
@@ -79,5 +87,4 @@ Transport Fever 3 模組：新增貨物「包裹」。居民與商工業把包�
   - 倉庫模型、地面、圍籬是否完整，庫存模型是否隨庫存顯示貨物。
   - 四張卡片是否都正常顯示。
   - 進口產出的包裹是否可能被路由到其他城鎮的出口分揀中心。
-- **效能優化（已退回）**：2026-10-27 試過一輪效能優化（除錯開關與 `deploy.ps1 -Release`、建造事件觸發的投遞處掃描、城鎮建築網格查找與 30 秒間隔、新投遞箱初始最低效率、除錯版計時 log）。使用者覺得 FPS 反而變低，原因沒確認，整批退回優化前的程式。優化版完整保存在 git 分支 `performance-optimization`（`git diff main performance-optimization` 可看全部差異），要再優化時先從那裡挑單項、逐項測 FPS。
 - **城市包裹需求係數**：改成 2 之後的實際效果還沒驗證。

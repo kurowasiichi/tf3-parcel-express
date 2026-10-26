@@ -65,6 +65,11 @@ global record PdState
 	pointBoxes : {Engine.Entity : Engine.Entity}
 	pointAttempts : {Engine.Entity : integer}
 	pointAttemptsVersion : integer
+	--- the delivery points have to be looked for again: set after a build proposal of the player and while a requested
+	--- drop box is not paired yet
+	pointsDirty : boolean
+	--- the town buildings are scanned on the next pass (a new mailbox was found)
+	buildingsDirty : boolean
 	--- diagnostics: parcels that left a stock, by what became of them
 	leftDestroyedNoTarget : integer
 	leftDestroyedWithTarget : integer
@@ -74,6 +79,11 @@ global record PdState
 	readsLow : integer
 	--- game time (ms) up to which the consumption of the commercial and industrial buildings is counted, -1 if not yet
 	consumedUntil : integer
+end
+
+--- parcel_delivery/debug.tl
+global record PdDebug
+	Enabled : boolean
 end
 
 --- parcel_delivery/production.tl

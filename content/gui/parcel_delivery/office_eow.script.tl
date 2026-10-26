@@ -14,6 +14,7 @@ local station_group_eow = ug_require "::/gui/entity_window/station_group/station
 local warehouse_eow = ug_require "::/gui/entity_window/warehouse/warehouse_eow.script.tl" as WarehouseEow
 
 local production = ug_require "/parcel_delivery/production.tl" as PdProduction
+local pd_debug = ug_require "/parcel_delivery/debug.tl" as PdDebug
 
 local RefreshInterval <const> = 1.0
 --- parts of the resource names of the constructions with a parcel stock
@@ -210,7 +211,9 @@ end)
 
 function pd_office_eow.doReplaceFn(replacementApi : ReactReplacementApi)
 	replacementApi.ReplaceRecipe(empty_construction, EmptyConstructionContent)
-	log.message("[parcel_delivery] window of the parcel drop boxes without close-up view")
+	if pd_debug.Enabled then
+		log.message("[parcel_delivery] window of the parcel drop boxes without close-up view")
+	end
 end
 
 return pd_office_eow
