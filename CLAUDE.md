@@ -6,6 +6,8 @@ Transport Fever 3 模組：新增貨物「包裹」。居民與商工業把包�
 
 - 程式用 Teal（`.tl`）撰寫。型別檢查：`powershell -ExecutionPolicy Bypass -File tools\check.ps1`。執行前先把 `C:\Users\kurow\tools\tl\tl-0.24.7-windows-x86_64` 加進 PATH。
 - 部署：`powershell -ExecutionPolicy Bypass -File tools\deploy.ps1`，預設部署到 `staging_area`。型別檢查通過才部署。
+- 使用者說「希望部署發布版本」（或「部屬發布版本」）時，用 `tools\deploy.ps1 -Release`：部署出去的 `content\parcel_delivery\debug.tl` 會把 `Enabled` 改成 `false`，關閉診斷計算與一般 log，只留錯誤訊息與 perf 行；專案裡的檔案維持 `true`。平常測試用一般部署。
+- 除錯開關 `pd_debug.Enabled`（`parcel_delivery/debug.tl`）：新增的診斷計算或一般 log 都要包在開關裡，一般 log 用遊戲腳本的 `info()`；錯誤訊息與 perf 行直接用 `log.message`。
 - 效能量測：遊戲腳本每 60 秒遊戲時間寫一行 `[parcel_delivery] perf`（各部分次數／平均／最長毫秒、腳本佔現實時間的 `share`、道路段數與城鎮建築數等數量）。`tools\perf.ps1` 匯總目前的 log，`-Save <名稱>` 存到 `perf\<名稱>.csv`，`-Compare` 並列所有存檔。比較優化時用同一個存檔、同一個遊戲速度，各跑 5 分鐘以上。
 - 同一個模組 ID 同時存在於 `staging_area` 和 `local\mods` 時，遊戲載入的是 staging 的版本。log 裡會出現 `modHubId=StagingArea,<modId>`。
 - 遊戲 log：`C:\Program Files (x86)\Steam\userdata\84279570\3493540\local\crash_dump\stdout.txt`，用 `[parcel_delivery]` 篩選。

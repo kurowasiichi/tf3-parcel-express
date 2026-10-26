@@ -3,10 +3,13 @@
 #   -Target Mods: the user mod folder (local\mods)
 # Only the files the game needs are copied; development files (tools, tealdef, tlconfig, README) stay in the project.
 # The mod.io file id written by the game after the first upload is kept and copied back into the project.
-# Usage: powershell -ExecutionPolicy Bypass -File tools\deploy.ps1 [-Target Staging|Mods] [-Remove]
+#   -Release: the release version, the deployed copy of content\parcel_delivery\debug.tl has the debug switch off (no
+#   diagnostics, only errors in the log); the project keeps it on
+# Usage: powershell -ExecutionPolicy Bypass -File tools\deploy.ps1 [-Target Staging|Mods] [-Release] [-Remove]
 param(
     [ValidateSet("Staging", "Mods")]
     [string]$Target = "Staging",
+    [switch]$Release,
     [switch]$Remove
 )
 
@@ -50,6 +53,15 @@ if (Test-Path $temporary) { Remove-Item $temporary -Recurse -Force }
 New-Item -ItemType Directory -Path $temporary | Out-Null
 foreach ($item in "_metadata", "mod.json", "strings.json", "_content.json", "content") {
     Copy-Item (Join-Path $project $item) -Destination $temporary -Recurse
-}if (Test-Path $destination) { Remove-Item $destination -Recurse -Force }
+}
+if ($Release) {
+    $debugFile = Join-Path $temporary "content\parcel_delivery\debug.tl"
+    $text = [IO.File]::ReadAllText($debugFile)
+    $off = $text -replace "Enabled = true,", "Enabled = false,"
+    if ($off -eq $text) { throw "debug switch not found in $debugFile" }
+    [IO.File]::WriteAllText($debugFile, $off, (New-Object System.Text.UTF8Encoding $false))
+    Write-Output "Release version: debug switch off"
+}
+if (Test-Path $destination) { Remove-Item $destination -Recurse -Force }
 Move-Item $temporary $destination
 Write-Output "Installed $project -> $destination"

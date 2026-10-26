@@ -23,6 +23,7 @@
                   "mod.script.tl",
                   "parcel_delivery.gs.lua",
                   "parcel_delivery.script.tl",
+                  "parcel_delivery/debug.tl",
                   "parcel_delivery/empty.mdl",
                   "parcel_delivery/parcel_box.con.lua",
                   "parcel_delivery/parcel_box.script.tl",

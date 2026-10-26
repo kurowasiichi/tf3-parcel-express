@@ -11,6 +11,7 @@
 -- the game script state, not in module level variables.
 
 local production = ug_require "/parcel_delivery/production.tl" as PdProduction
+local pd_debug = ug_require "/parcel_delivery/debug.tl" as PdDebug
 
 local StateVersion <const> = 2
 local ParcelCargo <const> = production.ParcelCargo
@@ -146,6 +147,14 @@ local function perfLog(now : integer)
 	perf.parts = {}
 end
 
+--- a message for the log, written only with the debug switch (parcel_delivery/debug.tl); errors and the perf lines use
+--- log.message
+local function info(message : string)
+	if pd_debug.Enabled then
+		log.message(message)
+	end
+end
+
 local function newState() : PdState
 	return { version = StateVersion, boxes = {}, lastTime = -1, passes = 0, consumedUntil = -1 }
 end
@@ -228,7 +237,7 @@ local function ensureResidentialNeeds(parcel : CargoTypeId)
 		if not hasParcels then
 			table.insert(needs[1], parcel)
 			api.cmd.sendCommand(api.cmd.makeTownUpdateCargoNeedsCmd(townEntity, needs, true))
-			log.message("[parcel_delivery] town " .. tostring(townEntity) .. ": parcels added to the residential needs")
+			info("[parcel_delivery] town " .. tostring(townEntity) .. ": parcels added to the residential needs")
 		end
 	end, api.type.ComponentType.TOWN)
 end
@@ -255,7 +264,7 @@ local function updatePosts(s : PdState, parcel : CargoTypeId) : string
 		if string.find(fileName, OldSourceFile, 1, true) ~= nil or string.find(fileName, PostFile, 1, true) ~= nil
 				or string.find(fileName, DropWarehouseFile, 1, true) ~= nil or string.find(fileName, DropRangeTestFile, 1, true) ~= nil then
 			removeConstruction(constructionEntity)
-			log.message("[parcel_delivery] retired construction " .. fileName .. " " .. tostring(constructionEntity) .. " removed")
+			info("[parcel_delivery] retired construction " .. fileName .. " " .. tostring(constructionEntity) .. " removed")
 			return
 		end
 		local isDrop = string.find(fileName, DropFile, 1, true) ~= nil
@@ -279,7 +288,7 @@ local function updatePosts(s : PdState, parcel : CargoTypeId) : string
 			box = { source = constructionEntity, stockList = stockList, residents = 0, pending = 0, produced = 0, requested = -1 }
 			s.boxes[constructionEntity] = box
 			local sl = stockList >= 0 and api.engine.getComponent(stockList, api.type.ComponentType.STOCK_LIST) as Engine.Component.StockList or nil
-			log.message(string.format("[parcel_delivery] parcel post %d at %.0f, %.0f: parcel stock %d with %d parcels, productivity %.2f, built %d ms ago",
+			info(string.format("[parcel_delivery] parcel post %d at %.0f, %.0f: parcel stock %d with %d parcels, productivity %.2f, built %d ms ago",
 				constructionEntity, p.x, p.y, stockList,
 				stockList >= 0 and (api.engine.system.simEntityAtStockSystem.getStockCount(stockList, 0) or 0) or -1,
 				sl ~= nil and sl.modifiers ~= nil and sl.modifiers.productivity or -1,
@@ -370,7 +379,7 @@ local function checkDropBox(mailbox : Engine.Entity, box : PdBox)
 	local distance = streetDistance(box.position[1], box.position[2])
 	if distance == nil or distance > MaxStreetDistance then
 		removeConstruction(mailbox)
-		log.message(string.format("[parcel_delivery] drop box %d removed: no street within %d m", mailbox, MaxStreetDistance))
+		info(string.format("[parcel_delivery] drop box %d removed: no street within %d m", mailbox, MaxStreetDistance))
 	end
 end
 
@@ -463,12 +472,12 @@ local function pairDeliveryPoints(s : PdState)
 			end
 		end
 	end
-	if s.passes % LogEveryPasses == 1 then
+	if pd_debug.Enabled and s.passes % LogEveryPasses == 1 then
 		local samples : {string} = {}
 		for i = 1, math.min(#edgeObjects, 8) do
 			samples[i] = string.format("%d [%s]", edgeObjects[i][1], tostring(edgeObjects[i][2].edgeObjectConstruction))
 		end
-		log.message(string.format("[parcel_delivery] edge objects: %d; %s", #edgeObjects, table.concat(samples, "; ")))
+		info(string.format("[parcel_delivery] edge objects: %d; %s", #edgeObjects, table.concat(samples, "; ")))
 	end
 	perfCount("streetEdges", edgeCount)
 	perfCount("edgeObjects", #edgeObjects)
@@ -518,7 +527,7 @@ local function pairDeliveryPoints(s : PdState)
 		end
 		if paired ~= nil then
 			if s.pointBoxes[point] ~= paired then
-				log.message(string.format("[parcel_delivery] delivery point %d: drop box %d", point, paired))
+				info(string.format("[parcel_delivery] delivery point %d: drop box %d", point, paired))
 			end
 			s.pointBoxes[point] = paired
 		elseif not pending and (s.pointAttempts[point] or 0) < MaxDropBoxAttempts then
@@ -527,7 +536,7 @@ local function pairDeliveryPoints(s : PdState)
 			if place ~= nil then
 				buildDropBox(place)
 				requested[#requested + 1] = { p.x, p.y }
-				log.message(string.format("[parcel_delivery] delivery point %d: drop box requested at %.0f, %.0f", point, place[1], place[2]))
+				info(string.format("[parcel_delivery] delivery point %d: drop box requested at %.0f, %.0f", point, place[1], place[2]))
 			end
 		end
 	end
@@ -544,7 +553,7 @@ local function pairDeliveryPoints(s : PdState)
 			end
 			if not used and api.engine.entityExists(mailbox) then
 				removeConstruction(mailbox)
-				log.message(string.format("[parcel_delivery] delivery point %d removed: its drop box %d removed", point, mailbox))
+				info(string.format("[parcel_delivery] delivery point %d removed: its drop box %d removed", point, mailbox))
 			end
 		end
 	end
@@ -820,7 +829,9 @@ local function produce(s : PdState, days : number, now : integer, parcel : Cargo
 		end
 		-- the parcels per year of the residents in the range and of the businesses
 		box.perYear = (box.residents or 0) * perResidentPerDay * 365 + (box.businessPerDay or 0) * 365
-		box.room = reachableRoom(s, box, parcel)
+		if pd_debug.Enabled then
+			box.room = reachableRoom(s, box, parcel)
+		end
 		-- The rule of the stock produces like an industry, production.RuleCapacity parcels per year at productivity 1, so
 		-- the productivity is the share of that. The rule takes year / capacity / productivity for a parcel: productivity
 		-- 0 would make that 0, and the rule would produce as fast as it can, hence the minimum.
@@ -837,7 +848,9 @@ local function produce(s : PdState, days : number, now : integer, parcel : Cargo
 				api.cmd.sendCommand(api.cmd.makeStockListSetModifiersCmd(box.stockList, modifiers))
 			end
 			box.productivity = productivity
-			box.produced = (box.produced or 0) + producedBetween(box.stockList, from, now)
+			if pd_debug.Enabled then
+				box.produced = (box.produced or 0) + producedBetween(box.stockList, from, now)
+			end
 		end
 	end
 end
@@ -996,7 +1009,7 @@ local function fixSortingBoost() : boolean
 			local modifiers = api.type.StockList.Modifiers.new()
 			modifiers.productivity = production.SortingBoostFactor
 			api.cmd.sendCommand(api.cmd.makeStockListSetModifiersCmd(sub, modifiers))
-			log.message(string.format("[parcel_delivery] sorting center %d: workers boost %.2f set to %.2f", sub, productivity,
+			info(string.format("[parcel_delivery] sorting center %d: workers boost %.2f set to %.2f", sub, productivity,
 				production.SortingBoostFactor))
 		end
 	end
@@ -1136,7 +1149,7 @@ local function runUpdate(state : GameScriptState<PdState>) : integer
 	end)
 	if s == nil or s.version ~= StateVersion then
 		s = newState()
-		log.message("[parcel_delivery] state initialized")
+		info("[parcel_delivery] state initialized")
 	end
 	local now = gameTimeMs()
 	if s.lastTime < 0 or now < s.lastTime then
@@ -1199,15 +1212,24 @@ local function runUpdate(state : GameScriptState<PdState>) : integer
 		timed("townBuildings", function()
 			homes = scanBuildings(s)
 		end)
-		local okReach, errReach : boolean, any
-		timed("reachable", function()
-			okReach, errReach = pcall(function() : boolean
-				updateReachable(s, homes)
-				return true
+		if pd_debug.Enabled then
+			local okReach, errReach : boolean, any
+			timed("reachable", function()
+				okReach, errReach = pcall(function() : boolean
+					updateReachable(s, homes)
+					return true
+				end)
 			end)
-		end)
-		if not okReach then
-			log.message("[parcel_delivery] reachable residents failed: " .. tostring(errReach))
+			if not okReach then
+				log.message("[parcel_delivery] reachable residents failed: " .. tostring(errReach))
+			end
+		else
+			-- the diagnostics of a debug version are not kept in the state
+			s.homeShares = nil
+			for _, box in pairs(s.boxes) do
+				box.cargoSeen = nil
+				box.reachableHomes = nil
+			end
 		end
 		local okBoost, errBoost : boolean, any
 		timed("sortingBoost", function()
@@ -1217,20 +1239,22 @@ local function runUpdate(state : GameScriptState<PdState>) : integer
 			log.message("[parcel_delivery] sorting center boost failed: " .. tostring(errBoost))
 		end
 	end
-	local okTrack, errTrack : boolean, any
-	timed("cargoTracking", function()
-		okTrack, errTrack = pcall(function() : boolean
-			trackCargo(s)
-			return true
+	if pd_debug.Enabled then
+		local okTrack, errTrack : boolean, any
+		timed("cargoTracking", function()
+			okTrack, errTrack = pcall(function() : boolean
+				trackCargo(s)
+				return true
+			end)
 		end)
-	end)
-	if not okTrack and s.passes % LogEveryPasses == 1 then
-		log.message("[parcel_delivery] cargo tracking failed: " .. tostring(errTrack))
+		if not okTrack and s.passes % LogEveryPasses == 1 then
+			log.message("[parcel_delivery] cargo tracking failed: " .. tostring(errTrack))
+		end
 	end
 	timed("production", function()
 		produce(s, dt / millisPerDay(), now, parcel)
 	end)
-	if s.passes % LogEveryPasses == 1 then
+	if pd_debug.Enabled and s.passes % LogEveryPasses == 1 then
 		timed("summaryLog", function()
 			logSummary(s, parcel, how)
 		end)

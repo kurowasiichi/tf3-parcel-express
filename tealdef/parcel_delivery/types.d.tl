@@ -76,6 +76,11 @@ global record PdState
 	consumedUntil : integer
 end
 
+--- parcel_delivery/debug.tl
+global record PdDebug
+	Enabled : boolean
+end
+
 --- parcel_delivery/production.tl
 global record PdProduction
 	ParcelCargo : string
