@@ -67,7 +67,9 @@ Transport Fever 3 模組：新增貨物「包裹」。居民與商工業把包�
 - **遊戲腳本的錯誤會讓生產停止**：update 拋出錯誤（log 有 `Error while running game script`）時，所有投遞箱的生產規則都不再產出（2026-10-27 觀察到：錯誤開始後 `applyHistory` 不再增加）。錯誤也會讓狀態沒有存回去，同一輪一直重跑。update 整個包在 `pcall` 裡，各部分也各自 `pcall`，出錯只寫 log。
 - **遊戲腳本的限制**
   - `api.cmd.sendCommand` 不能附回呼函式（`Callbacks are currently disallowed`）。
-  - `forEachEntityWithComponent` 不能用在 `STOCK_LIST`。
+  - `forEachEntityWithComponent` 不能用在 `STOCK_LIST`，也不能用在 `EDGE_OBJECT`（2026-10-27：包在 pcall 裡每次都失敗，錯誤訊息沒記到）。
+  - 投遞箱只能靠 `streetConnectorSystem.forEach` 掃全部建築找到。`forEachConstructionWithMetadata(DropMetadata, true, true, …)` 找不到任何投遞箱；只讓全部建築掃描跑一次時，狀態裡的投遞箱被清空，腳本把所有投遞處的郵箱重蓋一遍（2026-10-27）。分揀中心用 `(SortingMetadata, false, true)` 找得到，投遞箱改用同樣參數是否有效還沒試。
+  - `api.engine.util.octree.findEntitiesInCircle(Vec2f, 半徑, BASE_EDGE_STREET)` 在遊戲腳本裡可用，回傳附近的道路段（2026-10-27 確認）。
   - `streetSystem.getEdgeObject2EdgeMap()` 在遊戲腳本裡傳回空表。要找站牌這類街道附屬物件，改走 `getNode2StreetEdgeMap()`，再讀每段道路 `BASE_EDGE.objects` 的物件，取其 `EDGE_OBJECT` 元件。
 - **建築腳本的路徑**：以 `util.useFn` 呼叫原版建築腳本時，結果裡的相對路徑會被解析到本模組。用之前要先轉成 `::/` 開頭的絕對路徑。
 - **舊的模組預設組合會讓新遊戲崩潰**：預設組合存有已刪除的內容時，開始新遊戲會在 `map_util.h` 的 `Get` 出現 assert `it != map.end()`，log 前面有 `Loading preset: <名稱>`。這和模組程式無關，重新建立預設組合即可。

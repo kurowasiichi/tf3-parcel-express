@@ -343,7 +343,9 @@ local function updatePosts(s : PdState, parcel : CargoTypeId) : string
 	for _, constructionEntity in pairs(api.engine.system.streetConnectorSystem.getStation2ConstructionMap()) do
 		visit(constructionEntity)
 	end
-	-- the parcel drop boxes are free-standing assets, not on the street network: found by their metadata
+	-- The parcel drop boxes are free-standing assets, not on the street network. This search by their metadata finds
+	-- none of them (2026-10-27: with the loop over all constructions above run only once, the drop boxes vanished from
+	-- the state); they are found by that loop, which has to run every time.
 	api.engine.system.streetConnectorSystem.forEachConstructionWithMetadata(production.DropMetadata, true, true,
 		function(constructionEntity : Engine.Entity, _construction : Engine.Component.Construction, _id : ConstructionId)
 			visit(constructionEntity)
